@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS Advanced — Nestlé Energy Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="mock-api.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+:root{
+  --navy:#0A1628;--navy-mid:#112040;--navy-light:#1a2f55;
+  --accent:#2563EB;--accent-light:#3B82F6;--accent-glow:rgba(37,99,235,0.12);
+  --warn:#F59E0B;--warn-bg:#fffbeb;
+  --red:#EF4444;--red-bg:#fef2f2;
+  --green:#10B981;--green-bg:#ecfdf5;
+  --ink:#111827;--ink-mid:#4B5563;--ink-light:#9CA3AF;
+  --border:#E5E7EB;--surface:#ffffff;--bg:#F9FAFB;
+  --sidebar-w:260px;--radius:10px;
+  --font:'Inter',system-ui,-apple-system,sans-serif;
+}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--ink);font-size:14px}
+.app{display:flex;height:100vh;overflow:hidden}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--navy);display:flex;flex-direction:column;padding:0 0 16px;overflow-y:auto;z-index:10}
+.sidebar-logo{padding:24px 20px 18px;border-bottom:1px solid var(--navy-light);margin-bottom:8px}
+.sidebar-brand{font-size:2rem;font-weight:800;color:#ffffff;letter-spacing:-0.02em;line-height:1.1}
+.sidebar-sub{font-size:.70rem;font-weight:700;letter-spacing:.08em;color:#7B93C0;text-transform:uppercase;margin-top:4px}
+.nav-section-label{font-size:.62rem;font-weight:700;letter-spacing:.10em;color:#4A6080;text-transform:uppercase;padding:12px 20px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:11px 16px;margin:1px 10px;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:600;color:#8BAFD4;border:1px solid transparent;transition:background .12s,color .12s;user-select:none}
+.nav-item:hover{background:var(--navy-mid);color:#C5D8F0}
+.nav-item.active{background:var(--accent);color:#ffffff;font-weight:700;border-color:var(--accent)}
+.nav-icon{width:14px;height:14px;border-radius:3px;display:inline-block;flex-shrink:0}
+.icon-overview{background:#3B82F6}.icon-factories{background:#6366F1}.icon-anomalies{background:#EF4444}
+.icon-savings{background:#F59E0B}.icon-co2{background:#10B981}.icon-settings{background:#6B7280}
+.sidebar-divider{border:none;border-top:1px solid var(--navy-light);margin:8px 14px}
+.sidebar-filter{padding:0 14px}
+.filter-label{font-size:.68rem;font-weight:600;color:#7B93C0;margin-bottom:4px;margin-top:10px;text-transform:uppercase;letter-spacing:.06em}
+.filter-select{width:100%;padding:6px 8px;border:1px solid var(--navy-light);border-radius:7px;background:var(--navy-mid);font-size:.79rem;color:#C5D8F0;font-family:var(--font);cursor:pointer;outline:none}
+.filter-select option{background:var(--navy)}
+.sidebar-footer{margin-top:auto;padding:12px 16px 0;font-size:.68rem;color:#4A6080;line-height:1.7}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;padding:24px 28px}
+.page{display:none}.page.active{display:block}
+
+/* HEADER */
+.page-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2px}
+.page-title{font-size:1.42rem;font-weight:800;color:var(--ink)}
+.page-sub{font-size:.76rem;color:var(--ink-light);margin-bottom:20px}
+.refresh-chip{font-size:.70rem;font-weight:600;color:var(--ink-light);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 11px}
+.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:4px;vertical-align:middle;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.live-chip{display:inline-flex;align-items:center;background:var(--green-bg);border:1px solid #6EE7B7;border-radius:20px;padding:2px 10px;font-size:.68rem;font-weight:600;color:#065F46;margin-left:10px;vertical-align:middle}
+
+/* KPI GRID */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+.kpi-label{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-light);margin-bottom:6px}
+.kpi-value{font-size:1.85rem;font-weight:800;color:var(--ink);line-height:1.1}
+.kpi-value .unit{font-size:.92rem;font-weight:600}
+.kpi-delta{font-size:.71rem;font-weight:600;margin-top:4px}
+.kpi-delta.good{color:#065F46}.kpi-delta.bad{color:#B91C1C}.kpi-delta.warn{color:#92400E}.kpi-delta.neutral{color:var(--ink-light)}.kpi-delta.accent{color:var(--accent)}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:14px}
+.card-title{font-size:.88rem;font-weight:700;color:var(--ink);margin-bottom:14px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.col-map{display:grid;grid-template-columns:2fr 3fr 2fr;gap:14px;margin-bottom:14px}
+
+/* TABLE */
+.data-table{width:100%;border-collapse:collapse;font-size:.81rem}
+.data-table th{text-align:left;padding:8px 12px;color:var(--ink-light);font-weight:600;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)}
+.data-table td{padding:10px 12px;border-bottom:1px solid #F3F4F6;color:var(--ink)}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:#FAFBFF}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.66rem;font-weight:700;white-space:nowrap}
+.badge-good{background:var(--green-bg);color:#065F46}
+.badge-warn{background:var(--warn-bg);color:#92400E}
+.badge-bad{background:var(--red-bg);color:#991B1B}
+.badge-neutral{background:#F3F4F6;color:#4B5563}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.dot-green{background:var(--green)}.dot-orange{background:var(--warn)}.dot-red{background:var(--red)}
+
+/* PROGRESS */
+.prog-bar{background:#E5E7EB;border-radius:4px;height:5px;margin:6px 0}
+.prog-bar-fill{height:5px;border-radius:4px;transition:width .4s}
+
+/* FACTORY CARDS — clickable */
+.factory-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.factory-card:hover{box-shadow:0 4px 16px rgba(37,99,235,.12);border-color:#BFDBFE}
+.factory-name{font-size:.93rem;font-weight:700;color:var(--ink)}
+.factory-sub{font-size:.70rem;color:var(--ink-light);margin-top:1px}
+
+/* SITE DETAIL VIEW */
+.detail-view{display:none}.detail-view.active{display:block}
+.back-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:7px;border:1px solid var(--border);background:var(--surface);font-size:.80rem;font-weight:600;color:var(--ink-mid);cursor:pointer;margin-bottom:16px;transition:background .12s}
+.back-btn:hover{background:#F3F4F6}
+.period-btns{display:flex;gap:4px;flex-wrap:wrap}
+.period-btn{padding:5px 12px;border-radius:6px;font-size:.75rem;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--ink-mid);transition:all .12s}
+.period-btn:hover{background:#F3F4F6}
+.period-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* AHU CARDS */
+.ahu-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.ahu-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ahu-id{font-size:.88rem;font-weight:700;color:var(--ink)}
+.ahu-metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:.76rem}
+.ahu-metric-label{color:var(--ink-light)}
+.ahu-metric-value{font-weight:600;color:var(--ink)}
+
+/* TABS */
+.tabs{display:flex;gap:4px;margin-bottom:16px}
+.tab{padding:6px 16px;border-radius:7px;font-size:.81rem;font-weight:600;cursor:pointer;border:1px solid transparent;color:var(--ink-mid);background:transparent;transition:all .12s}
+.tab:hover{background:#F3F4F6}
+.tab.active{background:var(--surface);color:var(--accent);border-color:#BFDBFE}
+
+/* BANNERS */
+.banner{padding:11px 16px;border-radius:9px;font-size:.80rem;margin-top:12px;line-height:1.5}
+.banner-info{background:var(--warn-bg);border:1px solid #FDE68A;color:#78350F}
+.banner-success{background:var(--green-bg);border:1px solid #6EE7B7;color:#065F46}
+.banner-accent{background:#EFF6FF;border:1px solid #BFDBFE;color:var(--accent)}
+
+/* SETTINGS */
+.settings-group{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;overflow:hidden}
+.settings-group-header{padding:12px 18px;font-weight:700;font-size:.85rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.settings-group-header:hover{background:#FAFBFF}
+.settings-group-body{padding:4px 18px 16px;border-top:1px solid var(--border);display:none}
+.settings-group-body.open{display:block}
+.settings-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.settings-field label{display:block;font-size:.68rem;font-weight:700;color:var(--ink-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.settings-field input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:.83rem;font-family:var(--font);color:var(--ink);outline:none;transition:border-color .12s}
+.settings-field input:focus{border-color:var(--accent)}
+.settings-field .field-hint{font-size:.66rem;color:var(--ink-light);margin-top:3px}
+.btn{padding:8px 18px;border-radius:7px;font-size:.82rem;font-weight:700;cursor:pointer;border:none;font-family:var(--font);transition:opacity .12s}
+.btn:hover{opacity:.85}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-secondary{background:var(--surface);color:var(--ink-mid);border:1px solid var(--border)}
+.btn-danger{background:var(--red-bg);color:var(--red);border:1px solid #FECACA}
+.settings-actions{display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+
+/* GLOBAL PERIOD FILTER */
+.global-filter{display:flex;align-items:center;gap:8px}
+.global-period-select{padding:5px 12px;border:1px solid var(--border);border-radius:7px;font-size:.78rem;font-weight:600;font-family:var(--font);color:var(--ink);background:var(--surface);cursor:pointer;outline:none}
+.global-period-select:focus{border-color:var(--accent)}
+
+/* FACTORY MULTISELECT */
+.factory-search-wrap{position:relative;margin-bottom:16px}
+.factory-search-input{width:100%;padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:.84rem;font-family:var(--font);color:var(--ink);outline:none;cursor:pointer}
+.factory-search-input:focus{border-color:var(--accent)}
+.factory-dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.10);z-index:50;max-height:300px;overflow-y:auto;display:none}
+.factory-dropdown.open{display:block}
+.factory-dropdown-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:.83rem;border-bottom:1px solid #F3F4F6;transition:background .10s}
+.factory-dropdown-item:last-child{border-bottom:none}
+.factory-dropdown-item:hover{background:#F3F4F6}
+.factory-dropdown-item input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;flex-shrink:0}
+.factory-dropdown-item .site-name{font-weight:600;color:var(--ink)}
+.factory-dropdown-item .site-sub{font-size:.71rem;color:var(--ink-light)}
+.factory-search-actions{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border);background:#FAFBFF}
+.selected-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:0}
+.selected-tag{display:inline-flex;align-items:center;gap:5px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:20px;padding:3px 10px;font-size:.72rem;font-weight:600;color:var(--accent)}
+.selected-tag .remove-tag{cursor:pointer;font-size:.80rem;color:var(--accent);line-height:1}
+.anom-row{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 16px;margin-bottom:7px;display:flex;align-items:center;gap:12px}
+.opp-item{padding:12px 0;border-bottom:1px solid #F3F4F6}
+.opp-item:last-child{border-bottom:none}
+.opp-row{display:flex;justify-content:space-between;align-items:center}
+
+/* LOADING */
+.loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:40px;color:var(--ink-light);font-size:.82rem}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ENG */
+.eng-badge{position:fixed;top:12px;right:18px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:4px 12px;font-size:.76rem;font-weight:700;color:var(--ink);z-index:100;cursor:pointer}
+
+/* MAP */
+#swiss-map{height:280px;border-radius:8px;z-index:1}
+.leaflet-container{border-radius:8px}
+
+/* SCOPE */
+.scope-row{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid #F3F4F6}
+.scope-row:last-child{border-bottom:none}
+
+@media(max-width:900px){
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .col-map{grid-template-columns:1fr}
+  .grid-2{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="eng-badge">ENG</div>
+<div class="app">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-brand">Nestlé</div>
+    <div class="sidebar-sub">JARVIS ADVANCED</div>
+  </div>
+  <nav>
+    <div class="nav-section-label">Monitor</div>
+    <div class="nav-item active" data-page="overview"><span class="nav-icon icon-overview"></span>Overview</div>
+    <div class="nav-item" data-page="factories"><span class="nav-icon icon-factories"></span>Factories</div>
+    <div class="nav-item" data-page="anomalies"><span class="nav-icon icon-anomalies"></span>Anomalies</div>
+    <div class="nav-section-label">Analysis</div>
+    <div class="nav-item" data-page="savings"><span class="nav-icon icon-savings"></span>Savings</div>
+    <div class="nav-item" data-page="co2"><span class="nav-icon icon-co2"></span>CO2 Tracking</div>
+    <hr class="sidebar-divider">
+    <div class="nav-item" data-page="settings"><span class="nav-icon icon-settings"></span>Settings</div>
+  </nav>
+  <div id="sidebar-filters" style="display:none">
+    <hr class="sidebar-divider">
+    <div class="sidebar-filter">
+      <div class="filter-label">Period</div>
+      <select class="filter-select" id="filter-period">
+        <option>Last 30 days</option><option>Last 3 months</option><option>YTD</option>
+      </select>
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    <div id="last-updated-sidebar">Connecting…</div>
+    <div style="margin-top:4px">Nestle · JARVIS Advanced 2025</div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- ══ OVERVIEW ══════════════════════════════════════════════════════════════ -->
+<div class="page active" id="page-overview">
+  <div class="page-header">
+    <div><span class="page-title">Energy overview — all sites</span><span class="live-chip"><span class="live-dot"></span>Live</span></div>
+    <div class="global-filter">
+      <select class="global-period-select" id="global-period" onchange="onGlobalPeriodChange()">
+        <option value="month">This Month</option>
+        <option value="last_month">Last Month</option>
+        <option value="6months">Last 6 Months</option>
+        <option value="year">Last Year</option>
+      </select>
+      <div class="refresh-chip" id="rc-overview">Last refresh: —</div>
+    </div>
+  </div>
+  <div class="page-sub">Synthetic TrendMiner feed · Karawang 2.0 + 9 Swiss factories</div>
+  <div class="kpi-grid" id="overview-kpis">
+    <div class="kpi-card" id="kpi-mwh">
+      <div class="kpi-label">Total Consumption</div>
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:8px">
+        <div>
+          <div class="kpi-value" id="kpi-mwh-val">—</div>
+          <div class="kpi-delta good" id="kpi-mwh-delta">&#8595; 6% vs baseline</div>
+        </div>
+        <canvas id="spark-mwh" width="80" height="36" style="flex-shrink:0;opacity:.8"></canvas>
+      </div>
+    </div>
+    <div class="kpi-card" id="kpi-co2">
+      <div class="kpi-label">CO2 Equivalent</div>
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:8px">
+        <div>
+          <div class="kpi-value" id="kpi-co2-val">—</div>
+          <div class="kpi-delta good" id="kpi-co2-delta">&#8595; 4% vs last month</div>
+        </div>
+        <canvas id="spark-co2" width="80" height="36" style="flex-shrink:0;opacity:.8"></canvas>
+      </div>
+    </div>
+    <div class="kpi-card"><div class="kpi-label">Potential Savings</div><div class="kpi-value" id="kpi-sav-val">—</div><div class="kpi-delta warn" id="kpi-sav-delta">—</div></div>
+    <div class="kpi-card"><div class="kpi-label">Sites Monitored</div><div class="kpi-value">9<span class="unit">/9</span></div><div class="kpi-delta neutral">Karawang + 9 Swiss</div></div>
+  </div>
+  <div class="col-map">
+    <div>
+      <div class="card" style="margin-bottom:0;height:100%">
+        <div class="card-title">Total consumption</div>
+        <div id="ov-mwh" style="font-size:2rem;font-weight:800;color:var(--accent);line-height:1.1"></div>
+        <div style="margin-top:16px">
+          <div class="card-title" style="margin-bottom:6px">Total CO2eq</div>
+          <div id="ov-co2" style="font-size:1.5rem;font-weight:800;color:var(--green)"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">Switzerland — factory locations <span style="font-size:.68rem;color:var(--ink-light);font-weight:400">Click a marker to view site</span></div>
+      <div id="swiss-map"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <select id="map-region" onchange="onMapRegionChange()" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:.80rem;font-family:var(--font);color:var(--ink);outline:none;cursor:pointer;">
+          <option value="">Select a region</option>
+          <option value="switzerland">Switzerland</option>
+          <option value="indonesia">Indonesia</option>
+        </select>
+        <select id="map-factory" onchange="onMapFactoryChange()" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:.80rem;font-family:var(--font);color:var(--ink);outline:none;cursor:pointer;">
+          <option value="">Select a factory</option>
+        </select>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title" style="color:var(--red)">Anomalies</div>
+        <div id="ov-anom" style="font-size:2.8rem;font-weight:800;color:var(--red);line-height:1"></div>
+        <div id="ov-anom-sub" style="font-size:.73rem;color:var(--ink-light);margin-top:4px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="color:var(--accent)">Potential Savings</div>
+        <div id="ov-sav" style="font-size:1.7rem;font-weight:800;color:var(--accent);line-height:1.1"></div>
+        <div id="ov-sav-sub" style="font-size:.73rem;color:var(--ink-light);margin-top:4px"></div>
+      </div>
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card" style="margin-bottom:0">
+      <div style="margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:8px">Consumption vs baseline — Swiss sites</div>
+        <div class="period-btns" id="trend-period-btns">
+          <div class="period-btn active" data-period="today">Today</div>
+          <div class="period-btn" data-period="5days">5 days</div>
+          <div class="period-btn" data-period="month">Month</div>
+          <div class="period-btn" data-period="5months">6 months</div>
+          <div class="period-btn" data-period="year">Annual</div>
+        </div>
+      </div>
+      <canvas id="chart-trend" style="max-height:120px"></canvas>
+    </div>
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">By energy type</div>
+      <canvas id="chart-donut" style="max-height:120px"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Factory breakdown</div>
+    <table class="data-table">
+      <thead><tr><th>Site</th><th>MWh</th><th>vs baseline</th><th>Status</th></tr></thead>
+      <tbody id="overview-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ FACTORIES ═════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-factories">
+  <div class="page-header">
+    <div class="page-title">Factory breakdown</div>
+    <div class="refresh-chip" id="rc-factories">Last refresh: —</div>
+  </div>
+  <div class="page-sub">Swiss sites + Karawang 2.0 · Click a card for details</div>
+
+  <!-- Grid view -->
+  <div id="factory-grid-view">
+    <div class="tabs">
+      <div class="tab active" data-tab="swiss">Switzerland</div>
+      <div class="tab" data-tab="karawang">Karawang 2.0</div>
+    </div>
+
+    <!-- Factory multiselect search -->
+    <div class="factory-search-wrap" id="factory-search-wrap">
+      <input class="factory-search-input" id="factory-search-input" readonly
+        placeholder="Search and select factories..."
+        onclick="toggleFactoryDropdown()">
+      <div class="factory-dropdown" id="factory-dropdown">
+        <div id="factory-dropdown-list"></div>
+        <div class="factory-search-actions">
+          <button class="btn btn-primary" onclick="applyFactorySelection()" style="padding:6px 14px;font-size:.78rem">OK — Apply</button>
+          <button class="btn btn-secondary" onclick="selectAllFactories()" style="padding:6px 14px;font-size:.78rem">Select all</button>
+          <button class="btn btn-secondary" onclick="clearFactorySelection()" style="padding:6px 14px;font-size:.78rem">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div class="selected-tags" id="selected-tags"></div>
+
+    <div id="tab-swiss">
+      <div class="grid-2" id="swiss-cards"><div class="loading"><div class="spinner"></div>Loading…</div></div>
+    </div>
+    <div id="tab-karawang" style="display:none">
+      <div class="grid-2" id="krw-cards"><div class="loading"><div class="spinner"></div>Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- Detail view (shown on card click) -->
+  <div id="factory-detail-view" class="detail-view">
+    <button class="back-btn" onclick="closeDetail()">&#8592; Back to all factories</button>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<!-- ══ ANOMALIES ══════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-anomalies">
+  <div class="page-header">
+    <div class="page-title">Anomalies detected</div>
+    <div class="refresh-chip" id="rc-anomalies">Last refresh: —</div>
+  </div>
+  <div class="page-sub">Z-score baseline model · flags more than 2 sigma from 30-day rolling average</div>
+  <div class="kpi-grid" id="anom-kpis"><div class="loading"><div class="spinner"></div></div></div>
+  <div id="anom-list"></div>
+  <div class="banner banner-info" style="margin-top:14px"><strong>Detection method:</strong> Z-score baseline model — flags consumption deviating more than 2 standard deviations from 30-day rolling average per site.</div>
+</div>
+
+<!-- ══ SAVINGS ════════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-savings">
+  <div class="page-header">
+    <div class="page-title">Savings & opportunities</div>
+    <div class="refresh-chip" id="rc-savings">Last refresh: —</div>
+  </div>
+  <div class="page-sub">Identified via anomaly detection & baseline analysis</div>
+  <div class="kpi-grid" id="savings-kpis"><div class="loading"><div class="spinner"></div></div></div>
+  <div class="card">
+    <div class="card-title">Top opportunities <span style="font-size:.71rem;color:#9CA3AF;font-weight:400;float:right">Sorted by impact</span></div>
+    <div id="opp-list"></div>
+  </div>
+  <div class="banner banner-success" id="savings-banner"></div>
+</div>
+
+<!-- ══ CO2 ════════════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-co2">
+  <div class="page-header">
+    <div class="page-title">CO2 tracking — all sites</div>
+    <div class="refresh-chip" id="rc-co2">Last refresh: —</div>
+  </div>
+  <div class="page-sub">GHG emissions · Scope 1, 2 & 3 · Net Zero target 2050</div>
+  <div class="kpi-grid" id="co2-kpis"><div class="loading"><div class="spinner"></div></div></div>
+  <div class="card"><div class="card-title">Emissions by scope</div><div id="scope-list"></div></div>
+  <div class="card" style="margin-top:14px">
+    <div class="card-title">CO2e by site</div>
+    <table class="data-table">
+      <thead><tr><th>Site</th><th>tCO2e</th><th>t/MWh</th><th>vs target</th><th>Status</th><th>Canton</th></tr></thead>
+      <tbody id="co2-table"></tbody>
+    </table>
+  </div>
+  <div class="banner banner-accent"><strong>Nestle Net Zero roadmap:</strong> minus 50% emissions by 2030 · Net Zero by 2050. Swiss grid factor: <span id="co2-factor-display"></span> tCO2e/MWh.</div>
+</div>
+
+<!-- ══ SETTINGS ═══════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-settings">
+  <div class="page-title">Settings</div>
+  <div class="page-sub" style="margin-bottom:20px">Configure emission factors, energy prices, and KPI thresholds. Saved locally in your browser.</div>
+  <div class="settings-group">
+    <div class="settings-group-header" onclick="toggleGroup(this)">Emission Factors <span>+</span></div>
+    <div class="settings-group-body open">
+      <div class="settings-row">
+        <div class="settings-field"><label>Swiss Electricity (tCO2e/MWh)</label><input type="number" id="cfg-swiss-elec" step="0.001" min="0"><div class="field-hint">Default: 0.023</div></div>
+        <div class="settings-field"><label>Indonesian Electricity (tCO2e/MWh)</label><input type="number" id="cfg-indo-elec" step="0.01" min="0"><div class="field-hint">Default: 0.85</div></div>
+        <div class="settings-field"><label>Natural Gas (tCO2e/MWh)</label><input type="number" id="cfg-gas" step="0.001" min="0"><div class="field-hint">Default: 0.202</div></div>
+        <div class="settings-field"><label>Steam (tCO2e/MWh)</label><input type="number" id="cfg-steam" step="0.001" min="0"><div class="field-hint">Default: 0.10</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="settings-group">
+    <div class="settings-group-header" onclick="toggleGroup(this)">Energy Prices <span>+</span></div>
+    <div class="settings-group-body open">
+      <div class="settings-row">
+        <div class="settings-field"><label>Electricity Price (CHF/kWh)</label><input type="number" id="cfg-energy-price" step="0.001" min="0"><div class="field-hint">Default: 0.18</div></div>
+        <div class="settings-field"><label>Gas Price (CHF/kWh)</label><input type="number" id="cfg-gas-price" step="0.001" min="0"><div class="field-hint">Default: 0.08</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="settings-group">
+    <div class="settings-group-header" onclick="toggleGroup(this)">KPI Thresholds <span>+</span></div>
+    <div class="settings-group-body">
+      <div class="settings-row">
+        <div class="settings-field"><label>Power Factor minimum</label><input type="number" id="cfg-pf-min" step="0.01" min="0" max="1"><div class="field-hint">Target: 0.95</div></div>
+        <div class="settings-field"><label>THD maximum (%)</label><input type="number" id="cfg-thd-max" step="0.5" min="0"><div class="field-hint">IEEE 519: below 8%</div></div>
+        <div class="settings-field"><label>Load Factor minimum</label><input type="number" id="cfg-lf-min" step="0.01" min="0" max="1"><div class="field-hint">Default: 0.55</div></div>
+        <div class="settings-field"><label>AHU Efficiency minimum (%)</label><input type="number" id="cfg-ahu-eff-min" step="1" min="0" max="100"><div class="field-hint">Default: 70%</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="settings-group">
+    <div class="settings-group-header" onclick="toggleGroup(this)">AHU Comfort Targets <span>+</span></div>
+    <div class="settings-group-body">
+      <div class="settings-row">
+        <div class="settings-field"><label>Room Temp min (C)</label><input type="number" id="cfg-temp-min" step="0.5"></div>
+        <div class="settings-field"><label>Room Temp max (C)</label><input type="number" id="cfg-temp-max" step="0.5"></div>
+        <div class="settings-field"><label>Humidity min (%)</label><input type="number" id="cfg-humid-min" step="1"></div>
+        <div class="settings-field"><label>Humidity max (%)</label><input type="number" id="cfg-humid-max" step="1"></div>
+        <div class="settings-field"><label>Pressure min (Pa)</label><input type="number" id="cfg-press-min" step="1"></div>
+        <div class="settings-field"><label>Pressure max (Pa)</label><input type="number" id="cfg-press-max" step="1"></div>
+      </div>
+    </div>
+  </div>
+  <div class="settings-actions">
+    <button class="btn btn-primary" onclick="saveSettings()">Save changes</button>
+    <button class="btn btn-secondary" onclick="loadPage(currentPage)">Discard</button>
+    <button class="btn btn-danger" onclick="resetSettings()">Reset to defaults</button>
+  </div>
+  <div id="settings-toast" style="display:none;margin-top:12px" class="banner banner-success">Settings saved. Dashboard will recalculate on next data load.</div>
+</div>
+
+</main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════
+const CFG_DEF = {
+  emissionFactors:{ swissElectricity:.023, indonesianElectricity:.85, gas:.202, steam:.10 },
+  energyPrice:.18, gasPrice:.08,
+  kpiThresholds:{ powerFactorMin:.95, thdMax:8, loadFactorMin:.55, ahuEffMin:70 },
+  ahuTargets:{ tempMin:18, tempMax:22, humidMin:45, humidMax:55, pressMin:5, pressMax:20 },
+};
+function getCfg(){
+  try{
+    const s=localStorage.getItem('jarvis_cfg');
+    if(!s) return JSON.parse(JSON.stringify(CFG_DEF));
+    const p=JSON.parse(s);
+    return{
+      emissionFactors:{...CFG_DEF.emissionFactors,...p.emissionFactors},
+      energyPrice:p.energyPrice??CFG_DEF.energyPrice,
+      gasPrice:p.gasPrice??CFG_DEF.gasPrice,
+      kpiThresholds:{...CFG_DEF.kpiThresholds,...p.kpiThresholds},
+      ahuTargets:{...CFG_DEF.ahuTargets,...p.ahuTargets},
+    };
+  }catch{return JSON.parse(JSON.stringify(CFG_DEF));}
+}
+function populateSettings(){
+  const c=getCfg();
+  const f=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  f('cfg-swiss-elec',c.emissionFactors.swissElectricity);
+  f('cfg-indo-elec',c.emissionFactors.indonesianElectricity);
+  f('cfg-gas',c.emissionFactors.gas);
+  f('cfg-steam',c.emissionFactors.steam);
+  f('cfg-energy-price',c.energyPrice);
+  f('cfg-gas-price',c.gasPrice);
+  f('cfg-pf-min',c.kpiThresholds.powerFactorMin);
+  f('cfg-thd-max',c.kpiThresholds.thdMax);
+  f('cfg-lf-min',c.kpiThresholds.loadFactorMin);
+  f('cfg-ahu-eff-min',c.kpiThresholds.ahuEffMin);
+  f('cfg-temp-min',c.ahuTargets.tempMin);f('cfg-temp-max',c.ahuTargets.tempMax);
+  f('cfg-humid-min',c.ahuTargets.humidMin);f('cfg-humid-max',c.ahuTargets.humidMax);
+  f('cfg-press-min',c.ahuTargets.pressMin);f('cfg-press-max',c.ahuTargets.pressMax);
+}
+function saveSettings(){
+  const g=id=>parseFloat(document.getElementById(id).value);
+  const cfg={
+    emissionFactors:{swissElectricity:g('cfg-swiss-elec'),indonesianElectricity:g('cfg-indo-elec'),gas:g('cfg-gas'),steam:g('cfg-steam')},
+    energyPrice:g('cfg-energy-price'),gasPrice:g('cfg-gas-price'),
+    kpiThresholds:{powerFactorMin:g('cfg-pf-min'),thdMax:g('cfg-thd-max'),loadFactorMin:g('cfg-lf-min'),ahuEffMin:g('cfg-ahu-eff-min')},
+    ahuTargets:{tempMin:g('cfg-temp-min'),tempMax:g('cfg-temp-max'),humidMin:g('cfg-humid-min'),humidMax:g('cfg-humid-max'),pressMin:g('cfg-press-min'),pressMax:g('cfg-press-max')},
+  };
+  localStorage.setItem('jarvis_cfg',JSON.stringify(cfg));
+  const t=document.getElementById('settings-toast');
+  t.style.display='block';setTimeout(()=>t.style.display='none',3000);
+  cachedData=null;
+}
+function resetSettings(){
+  if(!confirm('Reset all settings to defaults?'))return;
+  localStorage.removeItem('jarvis_cfg');populateSettings();cachedData=null;
+}
+function toggleGroup(h){
+  const b=h.nextElementSibling,i=h.querySelector('span');
+  b.classList.toggle('open');i.textContent=b.classList.contains('open')?'−':'+';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SWISS COORDS
+// ═══════════════════════════════════════════════════════════════
+const SWISS_COORDS={
+  'Avenches':[46.877,7.041],'Bâle':[47.559,7.588],'Broc':[46.600,7.100],
+  'Henniez':[46.710,6.820],'Konolfingen':[46.882,7.605],'Manno':[45.997,8.912],
+  'Orbe':[46.726,6.533],'Romont':[46.695,6.919],'Wangen bei Olten':[47.348,7.895],
+};
+
+// ═══════════════════════════════════════════════════════════════
+// CACHE & DATA
+// ═══════════════════════════════════════════════════════════════
+let cachedData=null, trendChart=null, donutChart=null, detailChart=null;
+let swissMap=null, mapMarkers=[];
+
+async function loadData(){
+  if(cachedData)return cachedData;
+  const cfg=getCfg();
+  const [swissSites,swissHistory]=await Promise.all([
+    TrendMinerAPI.fetchAllSwissSites(cfg),
+    TrendMinerAPI.fetchSwissHistory(cfg),
+  ]);
+  cachedData={swissSites,swissHistory,cfg};
+  updateRefreshChips();
+  return cachedData;
+}
+
+function updateRefreshChips(){
+  const now=new Date();
+  const t=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const chip=`<span class="live-dot"></span>Last refresh: ${t}`;
+  ['rc-overview','rc-factories','rc-anomalies','rc-savings','rc-co2'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.innerHTML=chip;
+  });
+  const sb=document.getElementById('last-updated-sidebar');
+  if(sb)sb.textContent=`Refreshed ${t}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+const ACCENT='#2563EB',RED='#EF4444',WARN='#F59E0B',GREEN='#10B981',PURPLE='#6366F1';
+
+function statusBadge(s){
+  if(s==='Anomaly'||s==='FAIL')return`<span class="dot dot-red"></span><span class="badge badge-bad">${s}</span>`;
+  if(s==='Review'||s==='WARN')return`<span class="dot dot-orange"></span><span class="badge badge-warn">${s}</span>`;
+  return`<span class="dot dot-green"></span><span class="badge badge-good">${s==='PASS'?'PASS':'Normal'}</span>`;
+}
+function pfBadge(s){
+  if(s==='Good')return`<span class="badge badge-good">Good</span>`;
+  if(s==='Warning')return`<span class="badge badge-warn">Warning</span>`;
+  return`<span class="badge badge-bad">Critical</span>`;
+}
+function kpiCard(label,value,delta,cls='good'){
+  return`<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-delta ${cls}">${delta}</div></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAP
+// ═══════════════════════════════════════════════════════════════
+function initMap(sites){
+  mapMarkers.forEach(m=>m.remove());mapMarkers=[];
+  if(!swissMap){
+    swissMap=L.map('swiss-map',{center:[46.8,8.2],zoom:7,zoomControl:true,scrollWheelZoom:false});
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+      attribution:'© OpenStreetMap © CARTO',maxZoom:12
+    }).addTo(swissMap);
+  }
+  sites.forEach(site=>{
+    const c=SWISS_COORDS[site.site];if(!c)return;
+    const col=site.status==='Anomaly'?RED:site.status==='Review'?WARN:GREEN;
+    const m=L.circleMarker(c,{radius:9,fillColor:col,color:'#fff',weight:2,fillOpacity:.9}).addTo(swissMap);
+    m.bindTooltip(`<strong>${site.site}</strong><br>${site.mwh.toFixed(0)} MWh | ${site.pct>0?'+':''}${site.pct.toFixed(1)}% vs baseline`,{sticky:true});
+    m.on('click',()=>{ loadPage('factories'); setTimeout(()=>openDetail(site.site,'swiss'),200); });
+    mapMarkers.push(m);
+  });
+
+  // Karawang marker
+  const krw=L.circleMarker([-6.321,107.304],{radius:9,fillColor:ACCENT,color:'#fff',weight:2,fillOpacity:.9}).addTo(swissMap);
+  krw.bindTooltip(`<strong>Karawang 2.0</strong><br>Indonesia · AHU Energy Monitor`,{sticky:true});
+  krw.on('click',()=>{ loadPage('factories'); setTimeout(()=>openDetail('Karawang 2.0','karawang'),200); });
+  mapMarkers.push(krw);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SITE DETAIL
+// ═══════════════════════════════════════════════════════════════
+let currentDetailPeriod='5months';
+
+async function openDetail(siteName, type){
+  document.getElementById('factory-grid-view').style.display='none';
+  const dv=document.getElementById('factory-detail-view');
+  dv.classList.add('active');
+  document.getElementById('detail-content').innerHTML=`<div class="loading"><div class="spinner"></div>Loading ${siteName}…</div>`;
+
+  const cfg=getCfg();
+  let lvPanels,ahus,siteInfo,isSwiss=(type==='swiss');
+
+  if(isSwiss){
+    const data=await loadData();
+    siteInfo=data.swissSites.find(s=>s.site===siteName);
+    [lvPanels,ahus]=await Promise.all([
+      TrendMinerAPI.fetchSiteLVPanels(siteName,cfg),
+      TrendMinerAPI.fetchSiteAHUs(siteName,cfg),
+    ]);
+  } else {
+    [lvPanels,ahus]=await Promise.all([
+      TrendMinerAPI.fetchAllLVPanels(cfg),
+      TrendMinerAPI.fetchAllAHUs(cfg),
+    ]);
+    siteInfo={site:'Karawang 2.0',mwh:0,co2e:0,savingsChf:0,pct:0,status:'Normal'};
+  }
+
+  const histData=isSwiss
+    ? await TrendMinerAPI.fetchTagHistory(siteName, currentDetailPeriod)
+    : null;
+
+  renderDetailView(siteName, type, siteInfo, lvPanels, ahus, histData, cfg);
+}
+
+function renderDetailView(siteName, type, siteInfo, lvPanels, ahus, histData, cfg){
+  const isSwiss=(type==='swiss');
+  const eff=ahus.length?+(ahus.reduce((s,a)=>s+a.efficiency,0)/ahus.length).toFixed(1):0;
+  const totalCost=ahus.reduce((s,a)=>s+parseFloat(a.dailyCostChf),0);
+  const ahuFail=ahus.filter(a=>a.health==='FAIL').length;
+  const ahuWarn=ahus.filter(a=>a.health==='WARN').length;
+
+  const periodBtns=['today','5days','month','5months','year'].map(p=>`
+    <div class="period-btn${p===currentDetailPeriod?' active':''}" onclick="changeDetailPeriod('${siteName}','${type}','${p}')">${
+      p==='today'?'Today':p==='5days'?'5 days':p==='month'?'Month':p==='5months'?'5 months':'Annual'
+    }</div>`).join('');
+
+  document.getElementById('detail-content').innerHTML=`
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2px">
+      <div style="font-size:1.3rem;font-weight:800;color:var(--ink)">${siteName}${isSwiss&&siteInfo?` — ${siteInfo.canton} · ${siteInfo.product}`:''}</div>
+      ${siteInfo?statusBadge(siteInfo.status):''}
+    </div>
+    <div style="font-size:.75rem;color:var(--ink-light);margin-bottom:18px">TrendMiner feed · Site-level data</div>
+
+    <div class="kpi-grid" style="margin-bottom:20px">
+      ${siteInfo&&isSwiss?kpiCard('Total MWh',`${siteInfo.mwh.toFixed(0)} <span class="unit">MWh</span>`,`${siteInfo.pct>0?'&#8593;':'&#8595;'} ${Math.abs(siteInfo.pct).toFixed(1)}% vs baseline`,siteInfo.pct>0?'bad':'good'):''}
+      ${siteInfo&&isSwiss?kpiCard('CO2e',`${siteInfo.co2e.toFixed(1)} <span class="unit">t</span>`,'this month'):''}
+      ${kpiCard('Avg AHU Efficiency',`${eff} <span class="unit">%</span>`,eff>=70?'Within target':'Below target',eff>=70?'good':'bad')}
+      ${kpiCard('AHU Health',`${ahus.length-ahuFail-ahuWarn} <span class="unit">PASS</span>`,`${ahuWarn} warn · ${ahuFail} fail`,ahuFail>0?'bad':ahuWarn>0?'warn':'good')}
+    </div>
+
+    ${isSwiss&&histData?`
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">Energy consumption — Electricity / Gas / Steam</div>
+        <div class="period-btns">${periodBtns}</div>
+      </div>
+      <canvas id="detail-chart" height="90"></canvas>
+    </div>`:''}
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title">Electrical panels — LV01 to LV06</div>
+      <table class="data-table">
+        <thead><tr><th>Panel</th><th>Power Factor</th><th>THD</th><th>Load Factor</th><th>Energy Intensity</th><th>Operating Cost</th><th>Savings</th></tr></thead>
+        <tbody>${lvPanels.map(p=>`<tr>
+          <td><strong>${p.panel}</strong></td>
+          <td>${p.powerFactor.toFixed(3)} ${pfBadge(p.pfStatus)}</td>
+          <td>${p.thd.toFixed(1)}% ${pfBadge(p.thdStatus)}</td>
+          <td>${p.loadFactor.toFixed(3)} ${pfBadge(p.lfStatus)}</td>
+          <td>${p.energyIntensity.toFixed(2)} kWh/m3</td>
+          <td>CHF ${p.operatingCost.toLocaleString()}</td>
+          <td style="color:${p.savings>=0?GREEN:RED};font-weight:600">${p.savings>=0?'+':''}CHF ${p.savings.toLocaleString()}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+
+    <div style="font-size:.88rem;font-weight:700;color:var(--ink);margin-bottom:12px">Air Handling Units</div>
+    <div class="grid-2">${ahus.map(a=>`
+      <div class="ahu-card">
+        <div class="ahu-header">
+          <div class="ahu-id">${a.id}</div>
+          <div>${statusBadge(a.health)}</div>
+        </div>
+        <div class="ahu-metrics">
+          <div><span class="ahu-metric-label">Room Temp</span><br><span class="ahu-metric-value" style="color:${a.tempOk?GREEN:RED}">${a.roomTemp.toFixed(1)} C</span></div>
+          <div><span class="ahu-metric-label">Humidity</span><br><span class="ahu-metric-value" style="color:${a.humidOk?GREEN:RED}">${a.roomHumid.toFixed(1)} %</span></div>
+          <div><span class="ahu-metric-label">Pressure</span><br><span class="ahu-metric-value" style="color:${a.pressOk?GREEN:RED}">${a.roomPress.toFixed(1)} Pa</span></div>
+          <div><span class="ahu-metric-label">Supply Temp</span><br><span class="ahu-metric-value">${a.supplyTemp.toFixed(1)} C</span></div>
+          <div><span class="ahu-metric-label">Cooling</span><br><span class="ahu-metric-value">${a.coolingKw.toFixed(1)} kW</span></div>
+          <div><span class="ahu-metric-label">Heating</span><br><span class="ahu-metric-value">${a.heatingKw.toFixed(1)} kW</span></div>
+          <div><span class="ahu-metric-label">Efficiency</span><br><span class="ahu-metric-value" style="color:${a.effOk?GREEN:RED}">${a.efficiency.toFixed(1)} %</span></div>
+          <div><span class="ahu-metric-label">Daily Cost</span><br><span class="ahu-metric-value">CHF ${a.dailyCostChf}</span></div>
+          <div><span class="ahu-metric-label">COP</span><br><span class="ahu-metric-value">${a.cop.toFixed(2)}</span></div>
+          <div><span class="ahu-metric-label">CO2/day</span><br><span class="ahu-metric-value">${a.co2Daily.toFixed(2)} t</span></div>
+        </div>
+      </div>`).join('')}</div>
+  `;
+
+  // Draw stacked bar chart
+  if(isSwiss&&histData){
+    if(detailChart){detailChart.destroy();detailChart=null;}
+    const ctx=document.getElementById('detail-chart');
+    if(ctx){
+      detailChart=new Chart(ctx,{
+        type:'bar',
+        data:{
+          labels:histData.map(p=>p.label),
+          datasets:[
+            {label:'Electricity',data:histData.map(p=>p.elec),backgroundColor:'rgba(37,99,235,.75)',stack:'s'},
+            {label:'Gas',        data:histData.map(p=>p.gas), backgroundColor:'rgba(99,102,241,.75)',stack:'s'},
+            {label:'Steam',      data:histData.map(p=>p.steam),backgroundColor:'rgba(245,158,11,.75)',stack:'s'},
+          ],
+        },
+        options:{
+          responsive:true,maintainAspectRatio:true,
+          plugins:{legend:{position:'top',labels:{font:{size:11},usePointStyle:true}}},
+          scales:{
+            x:{grid:{display:false},ticks:{font:{size:10},stacked:true}},
+            y:{grid:{color:'#F3F4F6'},ticks:{font:{size:10}},stacked:true,title:{display:true,text:'MWh',font:{size:10}}},
+          },
+        },
+      });
+    }
+  }
+}
+
+async function changeDetailPeriod(siteName, type, period){
+  currentDetailPeriod=period;
+  await openDetail(siteName, type);
+}
+
+function closeDetail(){
+  document.getElementById('factory-detail-view').classList.remove('active');
+  document.getElementById('factory-grid-view').style.display='block';
+  if(detailChart){detailChart.destroy();detailChart=null;}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDERERS
+// ═══════════════════════════════════════════════════════════════
+
+// ── Sparkline history buffers (rolling last 20 readings, updated every 1s) ──
+const sparkMwhHistory=[];const sparkCo2History=[];
+let sparkMwhChart=null;let sparkCo2Chart=null;
+let liveRefreshInterval=null;
+
+function drawSparkline(canvasId, data, color, chartRef){
+  const ctx=document.getElementById(canvasId);
+  if(!ctx)return null;
+  if(chartRef){chartRef.destroy();}
+  return new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:data.map((_,i)=>i),
+      datasets:[{data,borderColor:color,borderWidth:1.5,pointRadius:0,fill:true,
+        backgroundColor:color.replace(')',',0.10)').replace('rgb','rgba'),tension:.4}],
+    },
+    options:{
+      responsive:false,animation:false,
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{x:{display:false},y:{display:false}},
+    },
+  });
+}
+
+function startLiveKpiRefresh(swissSites,cfg){
+  if(liveRefreshInterval)clearInterval(liveRefreshInterval);
+  // seed sparkline with current value repeated 10x
+  const initMwh=swissSites.reduce((s,r)=>s+r.mwh,0);
+  const initCo2=swissSites.reduce((s,r)=>s+r.co2e,0);
+  if(!sparkMwhHistory.length){for(let i=0;i<10;i++)sparkMwhHistory.push(initMwh);}
+  if(!sparkCo2History.length){for(let i=0;i<10;i++)sparkCo2History.push(initCo2);}
+
+  liveRefreshInterval=setInterval(async()=>{
+    if(currentPage!=='overview')return;
+    // Re-fetch just the swiss sites (lightweight, no cache)
+    const freshSites=await TrendMinerAPI.fetchAllSwissSites(cfg);
+    const mwh=freshSites.reduce((s,r)=>s+r.mwh,0);
+    const co2=freshSites.reduce((s,r)=>s+r.co2e,0);
+    const save=freshSites.reduce((s,r)=>s+r.savingsChf,0);
+    const nAnom=freshSites.filter(r=>r.pct>2).length;
+
+    // Update KPI values
+    const mwhEl=document.getElementById('kpi-mwh-val');
+    const co2El=document.getElementById('kpi-co2-val');
+    const savEl=document.getElementById('kpi-sav-val');
+    const savDelta=document.getElementById('kpi-sav-delta');
+    if(mwhEl)mwhEl.innerHTML=`${mwh.toFixed(0)} <span class="unit">MWh</span>`;
+    if(co2El)co2El.innerHTML=`${co2.toFixed(0)} <span class="unit">tCO2e</span>`;
+    if(savEl)savEl.innerHTML=`CHF ${(save/1000).toFixed(0)}<span class="unit">k</span>`;
+    if(savDelta)savDelta.textContent=`${nAnom} opportunities`;
+
+    // Update big numbers
+    const ovMwh=document.getElementById('ov-mwh');
+    const ovCo2=document.getElementById('ov-co2');
+    if(ovMwh)ovMwh.innerHTML=`${mwh.toFixed(0)} <span style="font-size:1rem;font-weight:600">MWh</span>`;
+    if(ovCo2)ovCo2.innerHTML=`${co2.toFixed(0)} <span style="font-size:.85rem;font-weight:600">tCO2eq</span>`;
+
+    // Update sparklines
+    sparkMwhHistory.push(mwh);if(sparkMwhHistory.length>20)sparkMwhHistory.shift();
+    sparkCo2History.push(co2);if(sparkCo2History.length>20)sparkCo2History.shift();
+    sparkMwhChart=drawSparkline('spark-mwh',sparkMwhHistory,'rgb(37,99,235)',sparkMwhChart);
+    sparkCo2Chart=drawSparkline('spark-co2',sparkCo2History,'rgb(16,185,129)',sparkCo2Chart);
+
+    // Refresh timestamp
+    const t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const chip=`<span class="live-dot"></span>Last refresh: ${t}`;
+    const rc=document.getElementById('rc-overview');if(rc)rc.innerHTML=chip;
+    const sb=document.getElementById('last-updated-sidebar');if(sb)sb.textContent=`Refreshed ${t}`;
+  },1000);
+}
+
+// --- OVERVIEW ---
+let trendPeriod='today';
+
+async function renderOverview(){
+  const{swissSites,swissHistory,cfg}=await loadData();
+  const totalMwh=swissSites.reduce((s,r)=>s+r.mwh,0);
+  const totalCo2=swissSites.reduce((s,r)=>s+r.co2e,0);
+  const totalSave=swissSites.reduce((s,r)=>s+r.savingsChf,0);
+  const nAnom=swissSites.filter(r=>r.pct>2).length;
+
+  // Set initial KPI values
+  const mwhEl=document.getElementById('kpi-mwh-val');
+  const co2El=document.getElementById('kpi-co2-val');
+  const savEl=document.getElementById('kpi-sav-val');
+  const savDelta=document.getElementById('kpi-sav-delta');
+  if(mwhEl)mwhEl.innerHTML=`${totalMwh.toFixed(0)} <span class="unit">MWh</span>`;
+  if(co2El)co2El.innerHTML=`${totalCo2.toFixed(0)} <span class="unit">tCO2e</span>`;
+  if(savEl)savEl.innerHTML=`CHF ${(totalSave/1000).toFixed(0)}<span class="unit">k</span>`;
+  if(savDelta)savDelta.textContent=`${nAnom} opportunities`;
+
+  // Draw initial sparklines
+  sparkMwhChart=drawSparkline('spark-mwh',sparkMwhHistory.length?sparkMwhHistory:Array(10).fill(totalMwh),'rgb(37,99,235)',sparkMwhChart);
+  sparkCo2Chart=drawSparkline('spark-co2',sparkCo2History.length?sparkCo2History:Array(10).fill(totalCo2),'rgb(16,185,129)',sparkCo2Chart);
+
+  // Start 1-second live refresh
+  startLiveKpiRefresh(swissSites,cfg);
+
+  document.getElementById('ov-mwh').innerHTML=`${totalMwh.toFixed(0)} <span style="font-size:1rem;font-weight:600">MWh</span>`;
+  document.getElementById('ov-co2').innerHTML=`${totalCo2.toFixed(0)} <span style="font-size:.85rem;font-weight:600">tCO2eq</span>`;
+  document.getElementById('ov-anom').textContent=nAnom;
+  document.getElementById('ov-anom-sub').textContent=`${nAnom} site${nAnom!==1?'s':''} above baseline`;
+  document.getElementById('ov-sav').innerHTML=`CHF ${(totalSave/1000).toFixed(0)}<span style="font-size:.95rem;font-weight:600">k</span>`;
+  document.getElementById('ov-sav-sub').textContent=`${nAnom} opportunities identified`;
+
+  initMap(swissSites);
+  await renderTrendChart(trendPeriod);
+
+  if(donutChart)donutChart.destroy();
+  donutChart=new Chart(document.getElementById('chart-donut'),{
+    type:'doughnut',
+    data:{labels:['Electricity','Gas','Steam'],datasets:[{data:[58,29,13],backgroundColor:[ACCENT,PURPLE,WARN],borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+      plugins:{legend:{position:'bottom',labels:{font:{size:10},usePointStyle:true,boxWidth:8}}}},
+  });
+
+  document.getElementById('overview-table').innerHTML=swissSites.map(r=>{
+    const arrow=r.pct>0?'&#8593;':'&#8595;',col=r.pct>0?RED:GREEN;
+    return`<tr>
+      <td><strong>${r.site}</strong></td>
+      <td>${r.mwh.toFixed(0)}</td>
+      <td style="color:${col};font-weight:600">${arrow} ${Math.abs(r.pct).toFixed(1)}%</td>
+      <td>${statusBadge(r.status)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function renderTrendChart(period){
+  // Fetch aggregated history across all Swiss sites for the given period
+  const siteNames=Object.keys(TrendMinerAPI.SWISS_SITES);
+  // Fetch all sites in parallel for the period
+  const allHistories=await Promise.all(
+    siteNames.map(s=>TrendMinerAPI.fetchTagHistory(s,period))
+  );
+  // Aggregate: sum each time slot across sites
+  const nPts=allHistories[0].length;
+  const labels=allHistories[0].map(p=>p.label);
+  const actuals=Array.from({length:nPts},(_,i)=>
+    allHistories.reduce((sum,hist)=>sum+(hist[i]?.elec||0)+(hist[i]?.gas||0)+(hist[i]?.steam||0),0)
+  );
+  const totalBaseline=siteNames.reduce((s,name)=>s+(TrendMinerAPI.SWISS_SITES[name]?.baseline||0),0);
+  const scaleMap={today:1/30,['5days']:5/30,month:1,['5months']:5,year:12};
+  const scale=scaleMap[period]||1;
+  const baselines=actuals.map(()=>totalBaseline*scale);
+
+  if(trendChart)trendChart.destroy();
+  trendChart=new Chart(document.getElementById('chart-trend'),{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Actual',data:actuals,borderColor:ACCENT,backgroundColor:'rgba(37,99,235,.08)',fill:true,tension:.3,pointRadius:3,pointBackgroundColor:ACCENT,borderWidth:2},
+      {label:'Baseline',data:baselines,borderColor:'#D1D5DB',borderDash:[5,4],fill:false,tension:0,pointRadius:0,borderWidth:1.5},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{font:{size:10},usePointStyle:true,boxWidth:8}}},
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:9},maxTicksLimit:8}},
+        y:{grid:{color:'#F3F4F6'},ticks:{font:{size:9}}},
+      }},
+  });
+}
+
+// Period buttons on overview trend
+document.querySelectorAll('#trend-period-btns .period-btn').forEach(btn=>{
+  btn.addEventListener('click',async()=>{
+    document.querySelectorAll('#trend-period-btns .period-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    trendPeriod=btn.dataset.period;
+    await renderTrendChart(trendPeriod);
+  });
+});
+
+// --- FACTORIES ---
+async function renderFactories(){
+  const{swissSites,cfg}=await loadData();
+
+  // Build dropdown if not yet built
+  if (allFactoryNames.length === 0) buildFactoryDropdown(swissSites);
+
+  // Update selected tags display
+  renderSelectedTags();
+
+  // Filter sites
+  const filtered = selectedFactories.size === 0
+    ? swissSites
+    : swissSites.filter(r => selectedFactories.has(r.site));
+
+  const showKrw = selectedFactories.size === 0 || selectedFactories.has('Karawang 2.0');
+
+  document.getElementById('swiss-cards').innerHTML = filtered.length === 0
+    ? `<div style="padding:40px;color:var(--ink-light);font-size:.84rem">No factories selected. Use the search bar above to select factories.</div>`
+    : filtered.map(r=>{
+    const arrow=r.pct>0?'&#8593;':'&#8595;',col=r.pct>0?RED:GREEN;
+    const msg=r.pct>8?'Unusual peak detected':r.pct>2?'Slight overrun — monitoring':'On track — target met';
+    const w=Math.min(Math.abs(r.pct)*5,96),bc=r.pct>8?RED:r.pct>2?WARN:ACCENT;
+    return`<div class="factory-card" onclick="openDetail('${r.site}','swiss')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div class="factory-name">${r.site}</div>
+          <div class="factory-sub">Switzerland · ${r.canton} · ${r.product}</div>
+        </div>
+        <div>${statusBadge(r.status)}</div>
+      </div>
+      <div style="font-size:.88rem;font-weight:700;margin-bottom:4px">
+        ${r.mwh.toFixed(0)} MWh
+        &nbsp;<span style="color:${col}">${arrow} ${Math.abs(r.pct).toFixed(0)}%</span>
+        &nbsp;<span style="color:#6B7280">${r.co2e.toFixed(0)} tCO2e</span>
+        &nbsp;<span style="color:${ACCENT}">CHF ${(r.savingsChf/1000).toFixed(1)}k</span>
+      </div>
+      <div class="prog-bar"><div class="prog-bar-fill" style="width:${w}%;background:${bc}"></div></div>
+      <div style="font-size:.73rem;color:#6B7280;margin-top:4px">${msg}</div>
+      <div style="font-size:.69rem;color:var(--accent);margin-top:6px;font-weight:600">Click for LV panels & AHU details →</div>
+    </div>`;
+  }).join('');
+
+  // Karawang card
+  document.getElementById('krw-cards').innerHTML = showKrw ? `
+    <div class="factory-card" onclick="openDetail('Karawang 2.0','karawang')" style="grid-column:1/-1">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div class="factory-name">Karawang 2.0</div>
+          <div class="factory-sub">Indonesia · Site 6761A · AHU Energy Monitor</div>
+        </div>
+        <span class="badge badge-accent">JARVIS Advanced</span>
+      </div>
+      <div style="font-size:.86rem;color:#6B7280;margin-bottom:6px">6 LV electrical panels · 10 Air Handling Units</div>
+      <div class="prog-bar"><div class="prog-bar-fill" style="width:65%;background:${ACCENT}"></div></div>
+      <div style="font-size:.69rem;color:var(--accent);margin-top:6px;font-weight:600">Click for LV panels & AHU details →</div>
+    </div>` : `<div style="padding:20px;color:var(--ink-light);font-size:.84rem">Karawang 2.0 not selected.</div>`;
+}
+
+// --- ANOMALIES ---
+async function renderAnomalies(){
+  const{swissSites,cfg}=await loadData();
+  const anoms=swissSites.filter(r=>r.pct>2).sort((a,b)=>b.pct-a.pct);
+  const critical=anoms.filter(r=>r.pct>8);
+  const eLost=anoms.reduce((s,r)=>s+Math.max(0,r.mwh-r.baseline),0);
+  document.getElementById('anom-kpis').innerHTML=
+    kpiCard('Total Anomalies',anoms.length.toString(),'this month','neutral')+
+    kpiCard('Critical',critical.length.toString(),'action required','bad')+
+    kpiCard('Energy Lost',`${eLost.toFixed(0)} <span class="unit">MWh</span>`,`approx CHF ${(eLost*cfg.energyPrice*1000/1000).toFixed(0)}k`,'warn')+
+    kpiCard('Resolved','3','this month','good');
+  const entries=[
+    {title:'HVAC peak',site:'Avenches',sub:'+38% above baseline · 14 Jun 03:20 · Electricity',sev:'Critical',stat:'Open',col:RED},
+    {title:'Compressor overload',site:'Broc',sub:'+29% above baseline · 11 Jun 23:45 · Gas',sev:'Critical',stat:'Open',col:RED},
+    {title:'Lighting off-hours',site:'Orbe',sub:'+11% above baseline · 09 Jun 22:00 · Electricity',sev:'Warning',stat:'Resolved',col:WARN},
+    {title:'Steam indicator',site:'Henniez',sub:'+8% above baseline · 07 Jun 06:15 · Steam',sev:'Warning',stat:'Resolved',col:WARN},
+    ...anoms.slice(0,3).map(r=>({title:'Consumption spike',site:r.site,sub:`+${r.pct.toFixed(1)}% above baseline · ${new Date().toLocaleDateString()} · Mixed`,sev:r.pct>8?'Critical':'Warning',stat:'Open',col:r.pct>8?RED:WARN})),
+  ];
+  document.getElementById('anom-list').innerHTML=entries.map(e=>`
+    <div class="anom-row">
+      <div style="width:9px;height:9px;border-radius:50%;background:${e.col};flex-shrink:0"></div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:.86rem">${e.title} — ${e.site}</div>
+        <div style="font-size:.72rem;color:#6B7280;margin-top:2px">${e.sub}</div>
+      </div>
+      <span class="badge ${e.sev==='Critical'?'badge-bad':'badge-warn'}">${e.sev}</span>
+      <span class="badge ${e.stat==='Open'?'badge-neutral':'badge-good'}">${e.stat}</span>
+      <span style="font-size:.74rem;color:${ACCENT};cursor:pointer">View</span>
+    </div>`).join('');
+}
+
+// --- SAVINGS ---
+async function renderSavings(){
+  const{swissSites}=await loadData();
+  const totalPot=swissSites.reduce((s,r)=>s+r.savingsChf,0);
+  const realized=totalPot*.37;
+  const mwhAv=swissSites.reduce((s,r)=>s+Math.max(0,r.mwh-r.baseline),0);
+  const openOpp=swissSites.filter(r=>r.pct>2).length;
+  document.getElementById('savings-kpis').innerHTML=
+    kpiCard('Total Potential',`CHF ${(totalPot/1000).toFixed(0)}<span class="unit">k</span>`,'across all sites')+
+    kpiCard('Already Realized',`CHF ${(realized/1000).toFixed(0)}<span class="unit">k</span>`,'&#8593; 6% vs last month')+
+    kpiCard('MWh Avoidable',`${mwhAv.toFixed(0)} <span class="unit">MWh</span>`,'if all actions taken','warn')+
+    kpiCard('Open Opportunities',openOpp.toString(),'awaiting action','warn');
+  const opps=[
+    {title:'HVAC scheduling — Avenches',desc:'Reduce off-hours HVAC runtime by 40% · Electricity',prio:'High',p:75,chf:'CHF 14k',mwh:'52 MWh'},
+    {title:'Compressor maintenance — Broc',desc:'Fix compressor efficiency loss · Gas',prio:'Medium',p:40,chf:'CHF 10k',mwh:'38 MWh'},
+    {title:'LED lighting upgrade — Bale',desc:'Replace legacy lighting system · Electricity',prio:'Low',p:20,chf:'CHF 6k',mwh:'28 MWh'},
+    {title:'Steam line insulation — Henniez',desc:'Reduce steam heat loss · Steam',prio:'Low',p:10,chf:'CHF 8k',mwh:'24 MWh'},
+  ];
+  document.getElementById('opp-list').innerHTML=opps.map(o=>`
+    <div class="opp-item">
+      <div class="opp-row">
+        <div>
+          <span style="font-weight:700;font-size:.86rem">${o.title}</span>
+          &nbsp;<span class="badge ${o.prio==='High'?'badge-bad':o.prio==='Medium'?'badge-warn':'badge-neutral'}">${o.prio}</span><br>
+          <span style="font-size:.72rem;color:#6B7280">${o.desc}</span>
+        </div>
+        <div style="text-align:right;min-width:85px">
+          <div style="font-size:.94rem;font-weight:800;color:${ACCENT}">${o.chf}</div>
+          <div style="font-size:.71rem;color:#6B7280">${o.mwh} saved</div>
+        </div>
+      </div>
+      <div class="prog-bar"><div class="prog-bar-fill" style="width:${o.p}%;background:${ACCENT}"></div></div>
+      <div style="font-size:.66rem;color:#9CA3AF">${o.p}% action progress</div>
+    </div>`).join('');
+  document.getElementById('savings-banner').innerHTML=`Implementing all open opportunities would avoid <strong>142 MWh</strong> and save <strong>CHF 24k</strong> over the next 3 months.`;
+}
+
+// --- CO2 ---
+async function renderCO2(){
+  const{swissSites,cfg}=await loadData();
+  const totalCo2=swissSites.reduce((s,r)=>s+r.co2e,0);
+  const totalMwh=swissSites.reduce((s,r)=>s+r.mwh,0);
+  document.getElementById('co2-kpis').innerHTML=
+    kpiCard('Total CO2e',`${totalCo2.toFixed(0)} <span class="unit">t</span>`,'&#8595; 4% vs last month')+
+    kpiCard('Per MWh',`${(totalCo2/totalMwh).toFixed(3)} <span class="unit">t/MWh</span>`,'Swiss grid avg','neutral')+
+    kpiCard('vs 2030 Target','&#8722;18%','target: minus 50% by 2030','warn')+
+    kpiCard('Annual Reduction','6%','achieved in 2025');
+  const scopes=[
+    {label:'Scope 1',color:RED,  desc:'Direct emissions — gas combustion, company vehicles',pct:28,up:false},
+    {label:'Scope 2',color:WARN, desc:'Indirect emissions — purchased electricity & steam',  pct:48,up:false},
+    {label:'Scope 3',color:ACCENT,desc:'Value chain — suppliers, logistics, waste',          pct:24,up:true},
+  ];
+  document.getElementById('scope-list').innerHTML=scopes.map(s=>`
+    <div class="scope-row">
+      <div style="min-width:72px"><span class="badge" style="background:${s.color}22;color:${s.color}">${s.label}</span></div>
+      <div style="flex:1">
+        <div style="font-size:.81rem;font-weight:500;margin-bottom:6px">${s.desc}</div>
+        <div class="prog-bar"><div class="prog-bar-fill" style="width:${s.pct}%;background:${s.color}"></div></div>
+      </div>
+      <div style="text-align:right;min-width:120px">
+        <div style="font-weight:700;font-size:.85rem">${(totalCo2*s.pct/100).toFixed(0)} tCO2e</div>
+        <div style="font-size:.70rem;color:${s.up?RED:GREEN};font-weight:600">${s.up?'&#8593;':'&#8595;'} ${s.pct===28?5:s.pct===48?3:2}% vs baseline</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('co2-table').innerHTML=swissSites.map(r=>{
+    const arrow=r.pct>0?'&#8593;':'&#8595;',col=r.pct>0?RED:GREEN;
+    return`<tr>
+      <td><strong>${r.site}</strong></td>
+      <td>${r.co2e.toFixed(1)}</td>
+      <td>${(r.co2e/r.mwh).toFixed(3)}</td>
+      <td style="color:${col};font-weight:600">${arrow} ${Math.abs(r.pct).toFixed(1)}%</td>
+      <td>${statusBadge(r.status)}</td>
+      <td>${r.canton}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('co2-factor-display').textContent=cfg.emissionFactors.swissElectricity;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GLOBAL PERIOD FILTER
+// ═══════════════════════════════════════════════════════════════
+let globalPeriod = 'month';
+
+function onGlobalPeriodChange() {
+  globalPeriod = document.getElementById('global-period').value;
+  cachedData = null; // force re-fetch
+  loadPage(currentPage);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FACTORY MULTISELECT
+// ═══════════════════════════════════════════════════════════════
+let selectedFactories = new Set(); // empty = all selected
+let allFactoryNames = [];
+
+function buildFactoryDropdown(swissSites) {
+  allFactoryNames = [
+    ...swissSites.map(s => ({ name: s.site, country: 'Switzerland', sub: `${s.canton} · ${s.product}` })),
+    { name: 'Karawang 2.0', country: 'Indonesia', sub: 'AHU Energy Monitor' },
+  ];
+
+  const list = document.getElementById('factory-dropdown-list');
+  if (!list) return;
+
+  // Group by country
+  const countries = [...new Set(allFactoryNames.map(f => f.country))];
+  list.innerHTML = countries.map(country => {
+    const factories = allFactoryNames.filter(f => f.country === country);
+    return `
+      <div style="padding:7px 14px 3px;font-size:.65rem;font-weight:700;color:var(--ink-light);text-transform:uppercase;letter-spacing:.07em;background:#FAFBFF;">${country}</div>
+      ${factories.map(f => `
+        <div class="factory-dropdown-item" onclick="toggleFactory('${f.name}',event)">
+          <input type="checkbox" id="chk-${f.name.replace(/\s/g,'_')}"
+            ${selectedFactories.size===0||selectedFactories.has(f.name)?'checked':''}>
+          <div>
+            <div class="site-name">${f.name}</div>
+            <div class="site-sub">${f.sub}</div>
+          </div>
+        </div>`).join('')}`;
+  }).join('');
+}
+
+function toggleFactory(name, e) {
+  e.stopPropagation();
+  const chk = document.getElementById(`chk-${name.replace(/\s/g,'_')}`);
+  if (selectedFactories.has(name)) {
+    selectedFactories.delete(name);
+    if (chk) chk.checked = false;
+  } else {
+    selectedFactories.add(name);
+    if (chk) chk.checked = true;
+  }
+}
+
+function toggleFactoryDropdown() {
+  const dd = document.getElementById('factory-dropdown');
+  dd.classList.toggle('open');
+  // Close on outside click
+  setTimeout(() => {
+    document.addEventListener('click', closeFactoryDropdown, { once: true });
+  }, 10);
+}
+
+function closeFactoryDropdown(e) {
+  const wrap = document.getElementById('factory-search-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('factory-dropdown').classList.remove('open');
+  }
+}
+
+function selectAllFactories() {
+  selectedFactories.clear();
+  document.querySelectorAll('#factory-dropdown-list input[type=checkbox]').forEach(c => c.checked = true);
+}
+
+function clearFactorySelection() {
+  selectedFactories.clear();
+  document.querySelectorAll('#factory-dropdown-list input[type=checkbox]').forEach(c => c.checked = false);
+}
+
+function applyFactorySelection() {
+  document.getElementById('factory-dropdown').classList.remove('open');
+  renderSelectedTags();
+  renderFactories();
+  updateMapForSelection();
+}
+
+function renderSelectedTags() {
+  const container = document.getElementById('selected-tags');
+  if (!container) return;
+  if (selectedFactories.size === 0) {
+    container.innerHTML = '<span style="font-size:.75rem;color:var(--ink-light)">All factories selected</span>';
+    return;
+  }
+  container.innerHTML = [...selectedFactories].map(name =>
+    `<span class="selected-tag">${name} <span class="remove-tag" onclick="removeFactory('${name}')">×</span></span>`
+  ).join('');
+}
+
+function removeFactory(name) {
+  selectedFactories.delete(name);
+  const chk = document.getElementById(`chk-${name.replace(/\s/g,'_')}`);
+  if (chk) chk.checked = false;
+  renderSelectedTags();
+  renderFactories();
+  updateMapForSelection();
+}
+
+function updateMapForSelection() {
+  if (!swissMap) return;
+  const selected = selectedFactories.size === 0 ? allFactoryNames : allFactoryNames.filter(f => selectedFactories.has(f.name));
+  const countries = [...new Set(selected.map(f => f.country))];
+
+  if (countries.length === 0) return;
+
+  if (countries.length > 1) {
+    // Multiple countries — world view
+    swissMap.flyTo([20, 20], 2, { duration: 1.2 });
+  } else if (countries[0] === 'Switzerland') {
+    swissMap.flyTo([46.8, 8.2], 7, { duration: 1.2 });
+  } else if (countries[0] === 'Indonesia') {
+    swissMap.flyTo([-6.321, 107.304], 9, { duration: 1.2 });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+const REGION_COORDS = {
+  switzerland: { center: [46.8, 8.2], zoom: 7 },
+  indonesia:   { center: [-6.3, 107.3], zoom: 8 },
+};
+
+const FACTORY_COORDS_ALL = {
+  ...SWISS_COORDS,
+  'Karawang 2.0': [-6.321, 107.304],
+};
+
+function onMapRegionChange() {
+  const region = document.getElementById('map-region').value;
+  const factorySelect = document.getElementById('map-factory');
+
+  // Populate factory dropdown
+  factorySelect.innerHTML = '<option value="">Select a factory</option>';
+  if (region === 'switzerland') {
+    Object.keys(SWISS_COORDS).forEach(name => {
+      factorySelect.innerHTML += `<option value="${name}">${name}</option>`;
+    });
+    swissMap.flyTo(REGION_COORDS.switzerland.center, REGION_COORDS.switzerland.zoom, { duration: 1.2 });
+  } else if (region === 'indonesia') {
+    factorySelect.innerHTML += `<option value="Karawang 2.0">Karawang 2.0</option>`;
+    swissMap.flyTo(REGION_COORDS.indonesia.center, REGION_COORDS.indonesia.zoom, { duration: 1.2 });
+  }
+}
+
+function onMapFactoryChange() {
+  const name = document.getElementById('map-factory').value;
+  if (!name) return;
+  const coords = FACTORY_COORDS_ALL[name];
+  if (!coords) return;
+  swissMap.flyTo(coords, 12, { duration: 1.0 });
+
+  // Highlight the marker with a pulse
+  mapMarkers.forEach(m => {
+    const mCoords = m.getLatLng();
+    const match = Math.abs(mCoords.lat - coords[0]) < 0.01 && Math.abs(mCoords.lng - coords[1]) < 0.01;
+    m.setStyle({ radius: match ? 13 : 9, weight: match ? 3 : 2 });
+    if (match) m.openTooltip();
+  });
+}
+
+
+let currentPage='overview';
+
+function loadPage(page){
+  currentPage=page;
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.page===page));
+  document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id===`page-${page}`));
+  document.getElementById('sidebar-filters').style.display=page==='factories'?'block':'none';
+  // Stop live 1s refresh when leaving overview
+  if(page!=='overview'&&liveRefreshInterval){
+    clearInterval(liveRefreshInterval);liveRefreshInterval=null;
+  }
+  // Reset detail view when switching away
+  if(page!=='factories'){closeDetail();}
+  switch(page){
+    case'overview': renderOverview();break;
+    case'factories':renderFactories();break;
+    case'anomalies':renderAnomalies();break;
+    case'savings':  renderSavings();break;
+    case'co2':      renderCO2();break;
+    case'settings': populateSettings();break;
+  }
+}
+
+document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>loadPage(el.dataset.page)));
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-swiss').style.display    =tab.dataset.tab==='swiss'    ?'block':'none';
+    document.getElementById('tab-karawang').style.display =tab.dataset.tab==='karawang' ?'block':'none';
+  });
+});
+
+// Auto-refresh every 60s
+setInterval(()=>{cachedData=null;loadPage(currentPage);},60000);
+
+loadPage('overview');
+</script>
+</body>
+</html>
