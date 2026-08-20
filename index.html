@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS Advanced — Nestlé Energy Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="mock-api.js"></script>
+<style>
+  /* ── Reset & base ──────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green:       #1D9E75;
+    --green-dark:  #0F6E56;
+    --green-light: #e8f5f0;
+    --green-border:#9FE1CB;
+    --warn:        #EF9F27;
+    --warn-bg:     #fef3e2;
+    --red:         #E24B4A;
+    --red-bg:      #fdecea;
+    --blue:        #378ADD;
+    --blue-bg:     #e8f0fb;
+    --ink:         #111111;
+    --ink-mid:     #444444;
+    --ink-light:   #777777;
+    --border:      #e0ece6;
+    --surface:     #ffffff;
+    --bg:          #f4f8f6;
+    --sidebar-w:   220px;
+    --radius:      12px;
+    --font:        'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--ink); font-size: 14px; }
+
+  /* ── Layout ────────────────────────────────────────────────────────────── */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ── Sidebar ───────────────────────────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--green-light);
+    border-right: 1px solid var(--green-border);
+    display: flex;
+    flex-direction: column;
+    padding: 0 0 16px 0;
+    overflow-y: auto;
+    z-index: 10;
+  }
+  .sidebar-logo {
+    padding: 20px 16px 12px;
+    border-bottom: 1px solid var(--green-border);
+    margin-bottom: 10px;
+  }
+  .sidebar-logo img { width: 100%; max-width: 130px; display: block; margin: 0 auto; }
+  .sidebar-logo .jarvis-label {
+    text-align: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--green-dark);
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 14px;
+    margin: 1px 8px;
+    border-radius: 9px;
+    cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: var(--ink-mid);
+    border: 1.5px solid transparent;
+    transition: background 0.12s, color 0.12s;
+    user-select: none;
+  }
+  .nav-item:hover { background: #d0ece3; }
+  .nav-item.active {
+    background: var(--surface);
+    color: var(--green-dark);
+    font-weight: 700;
+    border-color: var(--green-border);
+  }
+  .nav-item .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+
+  .sidebar-divider { border: none; border-top: 1px solid var(--green-border); margin: 10px 12px; }
+
+  .sidebar-filter { padding: 0 14px; }
+  .filter-label { font-size: 0.72rem; font-weight: 700; color: var(--ink); margin-bottom: 4px; margin-top: 10px; }
+  .filter-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1.5px solid var(--green-border);
+    border-radius: 8px;
+    background: var(--surface);
+    font-size: 0.80rem;
+    color: var(--ink);
+    font-family: var(--font);
+    cursor: pointer;
+    outline: none;
+  }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 10px 14px 0;
+    font-size: 0.70rem;
+    color: var(--ink-light);
+    line-height: 1.6;
+  }
+
+  /* ── Main content ──────────────────────────────────────────────────────── */
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+  }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .page-title { font-size: 1.45rem; font-weight: 800; color: var(--ink); margin-bottom: 2px; }
+  .page-sub   { font-size: 0.78rem; color: var(--ink-light); margin-bottom: 20px; }
+
+  /* ── KPI cards ─────────────────────────────────────────────────────────── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .kpi-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-light); }
+  .kpi-value { font-size: 1.9rem; font-weight: 800; color: var(--ink); line-height: 1.1; }
+  .kpi-value .unit { font-size: 0.95rem; font-weight: 600; }
+  .kpi-delta { font-size: 0.73rem; font-weight: 600; }
+  .kpi-delta.good    { color: var(--green-dark); }
+  .kpi-delta.bad     { color: var(--red); }
+  .kpi-delta.warn    { color: var(--warn); }
+  .kpi-delta.neutral { color: var(--ink-light); }
+
+  /* ── Section cards ─────────────────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 14px;
+  }
+  .card-title { font-size: 0.90rem; font-weight: 700; color: var(--ink); margin-bottom: 14px; }
+
+  /* ── Grid layouts ──────────────────────────────────────────────────────── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .col-5-3-2 { display: grid; grid-template-columns: 5fr 3fr 2fr; gap: 14px; }
+
+  /* ── Tables ────────────────────────────────────────────────────────────── */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .data-table th {
+    text-align: left; padding: 8px 12px;
+    color: var(--ink-light); font-weight: 600; font-size: 0.70rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--border);
+  }
+  .data-table td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; color: var(--ink); }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: #fafffe; }
+
+  /* ── Badges ────────────────────────────────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .badge-good    { background: #e8f5e9; color: var(--green-dark); }
+  .badge-warn    { background: var(--warn-bg); color: #b8680a; }
+  .badge-bad     { background: var(--red-bg); color: #c0392b; }
+  .badge-neutral { background: #f0f0f0; color: #555; }
+
+  /* ── Status dots ───────────────────────────────────────────────────────── */
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  .dot-green  { background: var(--green); }
+  .dot-orange { background: var(--warn); }
+  .dot-red    { background: var(--red); }
+
+  /* ── Progress bars ─────────────────────────────────────────────────────── */
+  .prog-bar { background: #e8e8e8; border-radius: 4px; height: 6px; margin: 6px 0; }
+  .prog-bar-fill { height: 6px; border-radius: 4px; transition: width 0.4s ease; }
+
+  /* ── Factory cards ─────────────────────────────────────────────────────── */
+  .factory-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .factory-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .factory-name { font-size: 0.96rem; font-weight: 700; color: var(--ink); }
+  .factory-sub  { font-size: 0.72rem; color: var(--ink-light); margin-top: 1px; }
+
+  /* ── AHU cards ─────────────────────────────────────────────────────────── */
+  .ahu-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .ahu-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .ahu-id { font-size: 0.90rem; font-weight: 700; color: var(--ink); }
+  .ahu-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: 0.78rem; }
+  .ahu-metric-label { color: var(--ink-light); }
+  .ahu-metric-value { font-weight: 600; color: var(--ink); }
+
+  /* ── Tabs ──────────────────────────────────────────────────────────────── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tab {
+    padding: 7px 16px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    color: var(--ink-mid);
+    background: transparent;
+    transition: all 0.12s;
+  }
+  .tab:hover { background: var(--green-light); }
+  .tab.active { background: var(--surface); color: var(--green-dark); border-color: var(--green-border); }
+
+  /* ── Banners ───────────────────────────────────────────────────────────── */
+  .banner {
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 0.81rem;
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+  .banner-info    { background: #fef9ec; border: 1px solid #f5d97a; color: #555; }
+  .banner-success { background: #edf7f2; border: 1px solid var(--green-border); color: var(--green-dark); }
+
+  /* ── Settings ──────────────────────────────────────────────────────────── */
+  .settings-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .settings-group-header {
+    padding: 13px 18px;
+    font-weight: 700;
+    font-size: 0.86rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    background: var(--surface);
+  }
+  .settings-group-header:hover { background: #fafffe; }
+  .settings-group-body { padding: 4px 18px 16px; border-top: 1px solid var(--border); display: none; }
+  .settings-group-body.open { display: block; }
+  .settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .settings-field label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--ink-light); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .settings-field input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.84rem;
+    font-family: var(--font);
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .settings-field input:focus { border-color: var(--green); }
+  .settings-field .field-hint { font-size: 0.68rem; color: var(--ink-light); margin-top: 3px; }
+
+  .btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    font-family: var(--font);
+    transition: opacity 0.12s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--green); color: white; }
+  .btn-secondary { background: var(--surface); color: var(--ink-mid); border: 1.5px solid var(--border); }
+  .btn-danger { background: var(--red-bg); color: var(--red); border: 1.5px solid #f5c6c6; }
+
+  .settings-actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+  /* ── Anomaly rows ──────────────────────────────────────────────────────── */
+  .anom-row {
+    background: var(--surface);
+    border: 1px solid #e8e8e8;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  /* ── Savings opportunity ───────────────────────────────────────────────── */
+  .opp-item { padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
+  .opp-item:last-child { border-bottom: none; }
+  .opp-row { display: flex; justify-content: space-between; align-items: center; }
+
+  /* ── Loading overlay ───────────────────────────────────────────────────── */
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 40px;
+    color: var(--ink-light);
+    font-size: 0.84rem;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── ENG badge ─────────────────────────────────────────────────────────── */
+  .eng-badge {
+    position: fixed; top: 12px; right: 18px;
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 8px; padding: 4px 12px;
+    font-size: 0.78rem; font-weight: 700; color: var(--ink);
+    z-index: 100; cursor: pointer;
+  }
+
+  /* ── Last updated chip ─────────────────────────────────────────────────── */
+  .live-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #edf7f2; border: 1px solid var(--green-border);
+    border-radius: 20px; padding: 2px 10px;
+    font-size: 0.68rem; font-weight: 600; color: var(--green-dark);
+    margin-left: 10px; vertical-align: middle;
+  }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Chart containers ──────────────────────────────────────────────────── */
+  .chart-wrap { position: relative; }
+
+  /* ── Responsive ────────────────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .col-5-3-2 { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="eng-badge">ENG ▾</div>
+
+<div class="app">
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div style="font-size:1.4rem;font-weight:800;color:var(--green-dark);text-align:center;letter-spacing:-0.02em;">JARVIS</div>
+      <div class="jarvis-label">Advanced · Energy Monitor</div>
+    </div>
+
+    <nav id="nav">
+      <div class="nav-item active" data-page="overview">
+        <span class="nav-icon">⚡</span> Overview
+      </div>
+      <div class="nav-item" data-page="factories">
+        <span class="nav-icon">🏭</span> Factories
+      </div>
+      <div class="nav-item" data-page="anomalies">
+        <span class="nav-icon">🔔</span> Anomalies
+      </div>
+      <div class="nav-item" data-page="savings">
+        <span class="nav-icon">💰</span> Savings
+      </div>
+      <div class="nav-item" data-page="co2">
+        <span class="nav-icon">🌍</span> CO₂ Tracking
+      </div>
+      <hr class="sidebar-divider">
+      <div class="nav-item" data-page="settings">
+        <span class="nav-icon">⚙️</span> Settings
+      </div>
+    </nav>
+
+    <div id="sidebar-filters" style="display:none;">
+      <hr class="sidebar-divider">
+      <div class="sidebar-filter">
+        <div class="filter-label">Site</div>
+        <select class="filter-select" id="filter-site">
+          <option value="all">All factories</option>
+        </select>
+        <div class="filter-label">Period</div>
+        <select class="filter-select" id="filter-period">
+          <option>Last 30 days</option>
+          <option>Last 3 months</option>
+          <option>YTD</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div id="last-updated">Fetching data…</div>
+      <div>© Nestlé · JARVIS Advanced 2025</div>
+    </div>
+  </aside>
+
+  <!-- ── Main ───────────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- ══ OVERVIEW ══════════════════════════════════════════════════════════ -->
+    <div class="page active" id="page-overview">
+      <div class="page-title">Energy overview — all sites <span class="live-chip"><span class="live-dot"></span>Live</span></div>
+      <div class="page-sub">Synthetic TrendMiner feed · Karawang 2.0 + 9 Swiss factories</div>
+
+      <div class="kpi-grid" id="overview-kpis">
+        <div class="loading"><div class="spinner"></div> Loading…</div>
+      </div>
+
+      <div class="col-5-3-2">
+        <div class="card">
+          <div class="card-title">Consumption vs baseline — Swiss sites (6 months)</div>
+          <div class="chart-wrap"><canvas id="chart-trend" height="200"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">By energy type</div>
+          <div class="chart-wrap"><canvas id="chart-donut" height="200"></canvas></div>
+        </div>
+        <div class="card" id="overview-anomaly-card">
+          <div class="card-title">Anomalies</div>
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Factory breakdown</div>
+        <table class="data-table">
+          <thead><tr><th>Site</th><th>MWh</th><th>vs baseline</th><th>Status</th></tr></thead>
+          <tbody id="overview-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ FACTORIES ══════════════════════════════════════════════════════════ -->
+    <div class="page" id="page-factories">
+      <div class="page-title">Factory breakdown</div>
+      <div class="page-sub">Swiss sites + Karawang 2.0 · Electrical panels & AHUs</div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="swiss">🇨🇭 Swiss Sites</div>
+        <div class="tab" data-tab="karawang">🇮🇩 Karawang 2.0</div>
+      </div>
+
+      <!-- Swiss -->
+      <div id="tab-swiss">
+        <div class="grid-2" id="swiss-cards">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div>
+
+      <!-- Karawang -->
+      <div id="tab-karawang" style="display:none;">
+        <div class="card" style="margin-bottom:14px;">
+          <div class="card-title">⚡ Electrical panels — LV01 to LV06</div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Panel</th>
+                <th>Power Factor</th>
+                <th>THD</th>
+                <th>Load Factor</th>
+                <th>Energy Intensity</th>
+                <th>Operating Cost</th>
+                <th>Savings</th>
+              </tr>
+            </thead>
+            <tbody id="lv-table"></tbody>
+          </table>
+        </div>
+
+        <div class="card-title" style="margin-bottom:12px;">🌬️ Air Handling Units</div>
+        <div class="grid-2" id="ahu-cards">
+          <div class="loading"><div class="spinner"></div> Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ ANOMALIES ══════════════════════════════════════════════════════════ -->
+    <div class="page" id="page-anomalies">
+      <div class="page-title">Anomalies detected</div>
+      <div class="page-sub">Z-score baseline model · flags > 2σ from 30-day rolling average</div>
+      <div class="kpi-grid" id="anom-kpis">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+      <div id="anom-list"></div>
+      <div class="banner banner-info">
+        💡 <strong>Detection method:</strong> Z-score baseline model — flags consumption deviating
+        more than 2σ from 30-day rolling average per site.
+      </div>
+    </div>
+
+    <!-- ══ SAVINGS ════════════════════════════════════════════════════════════ -->
+    <div class="page" id="page-savings">
+      <div class="page-title">Savings & opportunities</div>
+      <div class="page-sub">Identified via anomaly detection & baseline analysis</div>
+      <div class="kpi-grid" id="savings-kpis">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚡ Top opportunities <span style="font-size:0.73rem;color:#888;font-weight:400;float:right;">Sorted by impact</span></div>
+        <div id="opp-list"></div>
+      </div>
+      <div class="banner banner-success" id="savings-banner"></div>
+    </div>
+
+    <!-- ══ CO2 TRACKING ═══════════════════════════════════════════════════════ -->
+    <div class="page" id="page-co2">
+      <div class="page-title">CO₂ tracking — all sites</div>
+      <div class="page-sub">GHG emissions · Scope 1, 2 & 3 · Net Zero target 2050</div>
+      <div class="kpi-grid" id="co2-kpis">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🗂 Emissions by scope</div>
+        <div id="scope-list"></div>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <div class="card-title">🏭 CO₂e by site</div>
+        <table class="data-table">
+          <thead><tr><th>Site</th><th>tCO₂e</th><th>t/MWh</th><th>vs target</th><th>Status</th><th>Canton</th></tr></thead>
+          <tbody id="co2-table"></tbody>
+        </table>
+      </div>
+      <div class="banner banner-info">
+        🌍 <strong>Nestlé Net Zero roadmap:</strong> −50% emissions by 2030 · Net Zero by 2050. Swiss grid factor: <span id="co2-factor-display"></span> tCO₂e/MWh.
+      </div>
+    </div>
+
+    <!-- ══ SETTINGS ═══════════════════════════════════════════════════════════ -->
+    <div class="page" id="page-settings">
+      <div class="page-title">Settings</div>
+      <div class="page-sub">Configure emission factors, energy prices, and KPI thresholds. Saved locally in your browser.</div>
+
+      <!-- Emission factors -->
+      <div class="settings-group">
+        <div class="settings-group-header" onclick="toggleGroup(this)">
+          🌱 Emission Factors <span>▼</span>
+        </div>
+        <div class="settings-group-body open">
+          <div class="settings-row">
+            <div class="settings-field">
+              <label>Swiss Electricity (tCO₂e/MWh)</label>
+              <input type="number" id="cfg-swiss-elec" step="0.001" min="0">
+              <div class="field-hint">Swiss grid (hydro + nuclear). Default: 0.023</div>
+            </div>
+            <div class="settings-field">
+              <label>Indonesian Electricity (tCO₂e/MWh)</label>
+              <input type="number" id="cfg-indo-elec" step="0.01" min="0">
+              <div class="field-hint">Indonesian grid (coal-heavy). Default: 0.85</div>
+            </div>
+            <div class="settings-field">
+              <label>Natural Gas (tCO₂e/MWh)</label>
+              <input type="number" id="cfg-gas" step="0.001" min="0">
+              <div class="field-hint">Default: 0.202</div>
+            </div>
+            <div class="settings-field">
+              <label>Steam (tCO₂e/MWh)</label>
+              <input type="number" id="cfg-steam" step="0.001" min="0">
+              <div class="field-hint">Varies by generation method. Default: 0.10</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Energy prices -->
+      <div class="settings-group">
+        <div class="settings-group-header" onclick="toggleGroup(this)">
+          💰 Energy Prices <span>▼</span>
+        </div>
+        <div class="settings-group-body open">
+          <div class="settings-row">
+            <div class="settings-field">
+              <label>Electricity Price (CHF/kWh)</label>
+              <input type="number" id="cfg-energy-price" step="0.001" min="0">
+              <div class="field-hint">Swiss industrial rate. Default: 0.18</div>
+            </div>
+            <div class="settings-field">
+              <label>Gas Price (CHF/kWh)</label>
+              <input type="number" id="cfg-gas-price" step="0.001" min="0">
+              <div class="field-hint">Default: 0.08</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI thresholds -->
+      <div class="settings-group">
+        <div class="settings-group-header" onclick="toggleGroup(this)">
+          📊 KPI Thresholds <span>▼</span>
+        </div>
+        <div class="settings-group-body">
+          <div class="settings-row">
+            <div class="settings-field">
+              <label>Power Factor minimum</label>
+              <input type="number" id="cfg-pf-min" step="0.01" min="0" max="1">
+              <div class="field-hint">Below = warning. Target: ≥ 0.95</div>
+            </div>
+            <div class="settings-field">
+              <label>THD maximum (%)</label>
+              <input type="number" id="cfg-thd-max" step="0.5" min="0">
+              <div class="field-hint">Above = warning. IEEE 519: < 8%</div>
+            </div>
+            <div class="settings-field">
+              <label>Load Factor minimum</label>
+              <input type="number" id="cfg-lf-min" step="0.01" min="0" max="1">
+              <div class="field-hint">Below = warning. Default: 0.55</div>
+            </div>
+            <div class="settings-field">
+              <label>AHU Efficiency minimum (%)</label>
+              <input type="number" id="cfg-ahu-eff-min" step="1" min="0" max="100">
+              <div class="field-hint">Below = WARN. Default: 70%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AHU targets -->
+      <div class="settings-group">
+        <div class="settings-group-header" onclick="toggleGroup(this)">
+          🌬️ AHU Comfort Targets <span>▼</span>
+        </div>
+        <div class="settings-group-body">
+          <div class="settings-row">
+            <div class="settings-field">
+              <label>Room Temp min (°C)</label>
+              <input type="number" id="cfg-temp-min" step="0.5">
+            </div>
+            <div class="settings-field">
+              <label>Room Temp max (°C)</label>
+              <input type="number" id="cfg-temp-max" step="0.5">
+            </div>
+            <div class="settings-field">
+              <label>Humidity min (%)</label>
+              <input type="number" id="cfg-humid-min" step="1" min="0" max="100">
+            </div>
+            <div class="settings-field">
+              <label>Humidity max (%)</label>
+              <input type="number" id="cfg-humid-max" step="1" min="0" max="100">
+            </div>
+            <div class="settings-field">
+              <label>Pressure min (Pa)</label>
+              <input type="number" id="cfg-press-min" step="1">
+            </div>
+            <div class="settings-field">
+              <label>Pressure max (Pa)</label>
+              <input type="number" id="cfg-press-max" step="1">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-actions">
+        <button class="btn btn-primary" onclick="saveSettings()">💾 Save changes</button>
+        <button class="btn btn-secondary" onclick="loadPage(currentPage)">↩ Discard</button>
+        <button class="btn btn-danger" onclick="resetSettings()">⚠ Reset to defaults</button>
+      </div>
+
+      <div id="settings-toast" style="display:none;margin-top:12px;" class="banner banner-success">
+        ✅ Settings saved. Dashboard will recalculate on next data load.
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIG — defaults + localStorage
+// ════════════════════════════════════════════════════════════════════════════
+const CONFIG_DEFAULTS = {
+  emissionFactors: {
+    swissElectricity:     0.023,
+    indonesianElectricity:0.850,
+    gas:                  0.202,
+    steam:                0.100,
+  },
+  energyPrice:    0.18,
+  gasPrice:       0.08,
+  kpiThresholds: {
+    powerFactorMin: 0.95,
+    thdMax:         8.0,
+    loadFactorMin:  0.55,
+    ahuEffMin:      70,
+  },
+  ahuTargets: {
+    tempMin:   18, tempMax:   22,
+    humidMin:  45, humidMax:  55,
+    pressMin:   5, pressMax:  20,
+  },
+};
+
+function getCfg() {
+  try {
+    const stored = localStorage.getItem('jarvis_cfg');
+    return stored ? { ...CONFIG_DEFAULTS, ...JSON.parse(stored) } : { ...CONFIG_DEFAULTS };
+  } catch { return { ...CONFIG_DEFAULTS }; }
+}
+
+function saveCfgToStorage(cfg) {
+  localStorage.setItem('jarvis_cfg', JSON.stringify(cfg));
+}
+
+// ── Populate settings inputs ──────────────────────────────────────────────
+function populateSettings() {
+  const cfg = getCfg();
+  document.getElementById('cfg-swiss-elec').value   = cfg.emissionFactors.swissElectricity;
+  document.getElementById('cfg-indo-elec').value    = cfg.emissionFactors.indonesianElectricity;
+  document.getElementById('cfg-gas').value          = cfg.emissionFactors.gas;
+  document.getElementById('cfg-steam').value        = cfg.emissionFactors.steam;
+  document.getElementById('cfg-energy-price').value = cfg.energyPrice;
+  document.getElementById('cfg-gas-price').value    = cfg.gasPrice;
+  document.getElementById('cfg-pf-min').value       = cfg.kpiThresholds.powerFactorMin;
+  document.getElementById('cfg-thd-max').value      = cfg.kpiThresholds.thdMax;
+  document.getElementById('cfg-lf-min').value       = cfg.kpiThresholds.loadFactorMin;
+  document.getElementById('cfg-ahu-eff-min').value  = cfg.kpiThresholds.ahuEffMin;
+  document.getElementById('cfg-temp-min').value     = cfg.ahuTargets.tempMin;
+  document.getElementById('cfg-temp-max').value     = cfg.ahuTargets.tempMax;
+  document.getElementById('cfg-humid-min').value    = cfg.ahuTargets.humidMin;
+  document.getElementById('cfg-humid-max').value    = cfg.ahuTargets.humidMax;
+  document.getElementById('cfg-press-min').value    = cfg.ahuTargets.pressMin;
+  document.getElementById('cfg-press-max').value    = cfg.ahuTargets.pressMax;
+}
+
+function saveSettings() {
+  const cfg = {
+    emissionFactors: {
+      swissElectricity:      parseFloat(document.getElementById('cfg-swiss-elec').value),
+      indonesianElectricity: parseFloat(document.getElementById('cfg-indo-elec').value),
+      gas:                   parseFloat(document.getElementById('cfg-gas').value),
+      steam:                 parseFloat(document.getElementById('cfg-steam').value),
+    },
+    energyPrice: parseFloat(document.getElementById('cfg-energy-price').value),
+    gasPrice:    parseFloat(document.getElementById('cfg-gas-price').value),
+    kpiThresholds: {
+      powerFactorMin: parseFloat(document.getElementById('cfg-pf-min').value),
+      thdMax:         parseFloat(document.getElementById('cfg-thd-max').value),
+      loadFactorMin:  parseFloat(document.getElementById('cfg-lf-min').value),
+      ahuEffMin:      parseFloat(document.getElementById('cfg-ahu-eff-min').value),
+    },
+    ahuTargets: {
+      tempMin:  parseFloat(document.getElementById('cfg-temp-min').value),
+      tempMax:  parseFloat(document.getElementById('cfg-temp-max').value),
+      humidMin: parseFloat(document.getElementById('cfg-humid-min').value),
+      humidMax: parseFloat(document.getElementById('cfg-humid-max').value),
+      pressMin: parseFloat(document.getElementById('cfg-press-min').value),
+      pressMax: parseFloat(document.getElementById('cfg-press-max').value),
+    },
+  };
+  saveCfgToStorage(cfg);
+  const toast = document.getElementById('settings-toast');
+  toast.style.display = 'block';
+  setTimeout(() => toast.style.display = 'none', 3000);
+  cachedData = null; // force re-fetch on next page load
+}
+
+function resetSettings() {
+  if (!confirm('Reset all settings to defaults?')) return;
+  localStorage.removeItem('jarvis_cfg');
+  populateSettings();
+  cachedData = null;
+}
+
+function toggleGroup(header) {
+  const body = header.nextElementSibling;
+  const arrow = header.querySelector('span');
+  body.classList.toggle('open');
+  arrow.textContent = body.classList.contains('open') ? '▲' : '▼';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DATA CACHE
+// ════════════════════════════════════════════════════════════════════════════
+let cachedData = null;
+let trendChart = null;
+let donutChart = null;
+
+async function loadData() {
+  if (cachedData) return cachedData;
+  const cfg = getCfg();
+  const [swissSites, swissHistory, ahus, lvPanels] = await Promise.all([
+    TrendMinerAPI.fetchAllSwissSites(cfg),
+    TrendMinerAPI.fetchSwissHistory(cfg),
+    TrendMinerAPI.fetchAllAHUs(cfg),
+    TrendMinerAPI.fetchAllLVPanels(cfg),
+  ]);
+  cachedData = { swissSites, swissHistory, ahus, lvPanels, cfg };
+
+  // Update last updated
+  const now = new Date();
+  document.getElementById('last-updated').textContent =
+    `Updated: ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+  return cachedData;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════════════════
+const G = '#1D9E75', GD = '#0F6E56', WARN = '#EF9F27', RED = '#E24B4A', BLUE = '#378ADD';
+
+function statusBadge(status) {
+  if (status === 'Anomaly' || status === 'FAIL') return `<span class="dot dot-red"></span><span class="badge badge-bad">${status}</span>`;
+  if (status === 'Review'  || status === 'WARN') return `<span class="dot dot-orange"></span><span class="badge badge-warn">${status}</span>`;
+  return `<span class="dot dot-green"></span><span class="badge badge-good">${status === 'PASS' ? 'PASS' : 'Normal'}</span>`;
+}
+
+function pfBadge(s) {
+  if (s === 'Good')     return `<span class="badge badge-good">Good</span>`;
+  if (s === 'Warning')  return `<span class="badge badge-warn">Warning</span>`;
+  return `<span class="badge badge-bad">Critical</span>`;
+}
+
+function kpiCard(label, value, delta, deltaClass = 'good') {
+  return `<div class="kpi-card">
+    <div class="kpi-label">${label}</div>
+    <div class="kpi-value">${value}</div>
+    <div class="kpi-delta ${deltaClass}">${delta}</div>
+  </div>`;
+}
+
+function progBar(pct, color) {
+  const w = Math.min(Math.abs(pct) * 5, 96);
+  return `<div class="prog-bar"><div class="prog-bar-fill" style="width:${w}%;background:${color};"></div></div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PAGE RENDERERS
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── OVERVIEW ─────────────────────────────────────────────────────────────
+async function renderOverview() {
+  const { swissSites, swissHistory, cfg } = await loadData();
+
+  const totalMwh   = swissSites.reduce((s, r) => s + r.mwh, 0);
+  const totalCo2   = swissSites.reduce((s, r) => s + r.co2e, 0);
+  const totalSave  = swissSites.reduce((s, r) => s + r.savingsChf, 0);
+  const nAnom      = swissSites.filter(r => r.pct > 2).length;
+
+  document.getElementById('overview-kpis').innerHTML =
+    kpiCard('Total Consumption', `${totalMwh.toFixed(0)} <span class="unit">MWh</span>`, '↓ 6% vs baseline') +
+    kpiCard('CO₂ Equivalent',    `${totalCo2.toFixed(0)} <span class="unit">tCO₂e</span>`, '↓ 4% vs last month') +
+    kpiCard('Potential Savings', `CHF ${(totalSave/1000).toFixed(0)}<span class="unit">k</span>`, `${nAnom} opportunities`, 'warn') +
+    kpiCard('Sites Monitored',   `9<span class="unit">/9</span>`, 'Karawang + 9 Swiss', 'neutral');
+
+  // Trend chart
+  const months = swissHistory[Object.keys(swissHistory)[0]].map(p =>
+    new Date(p.timestamp).toLocaleDateString('en', { month: 'short', year: '2-digit' }));
+  const actuals   = months.map((_, i) => Object.values(swissHistory).reduce((s, h) => s + (h[i]?.value || 0), 0));
+  const baselines = months.map(() => Object.values(TrendMinerAPI.SWISS_SITES).reduce((s, v) => s + v.baseline, 0));
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById('chart-trend'), {
+    type: 'line',
+    data: {
+      labels: months,
+      datasets: [
+        { label: 'Actual', data: actuals, borderColor: G, backgroundColor: 'rgba(29,158,117,0.10)', fill: true, tension: 0.3, pointRadius: 4 },
+        { label: 'Baseline', data: baselines, borderColor: '#aaa', borderDash: [5, 4], fill: false, tension: 0, pointRadius: 0 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { position: 'top', labels: { font: { size: 11 } } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: '#eee' }, ticks: { font: { size: 10 } } },
+      },
+    },
+  });
+
+  // Donut chart
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(document.getElementById('chart-donut'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Electricity', 'Gas', 'Steam'],
+      datasets: [{ data: [58, 29, 13], backgroundColor: [G, BLUE, WARN], borderWidth: 0 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '62%',
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+    },
+  });
+
+  // Anomaly card
+  const anomSites = swissSites.filter(r => r.pct > 2).map(r => r.site);
+  document.getElementById('overview-anomaly-card').innerHTML =
+    `<div class="card-title">Anomalies detected</div>` +
+    (anomSites.length
+      ? anomSites.slice(0, 4).map(s => `<div style="margin:5px 0;"><span class="badge badge-bad">⚠ ${s}</span></div>`).join('')
+      : `<div style="color:${GD};font-size:0.84rem;">✓ All sites normal</div>`);
+
+  // Table
+  document.getElementById('overview-table').innerHTML = swissSites.map(r => {
+    const arrow = r.pct > 0 ? '↑' : '↓';
+    const col   = r.pct > 0 ? RED : GD;
+    return `<tr>
+      <td><strong>${r.site}</strong></td>
+      <td>${r.mwh.toFixed(0)}</td>
+      <td style="color:${col};font-weight:600;">${arrow} ${Math.abs(r.pct).toFixed(1)}%</td>
+      <td>${statusBadge(r.status)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── FACTORIES ────────────────────────────────────────────────────────────
+async function renderFactories() {
+  const { swissSites, ahus, lvPanels, cfg } = await loadData();
+
+  // Populate site filter
+  const sel = document.getElementById('filter-site');
+  sel.innerHTML = '<option value="all">All factories</option>' +
+    swissSites.map(r => `<option value="${r.site}">${r.site}</option>`).join('');
+
+  // Swiss cards
+  const filtered = sel.value === 'all' ? swissSites : swissSites.filter(r => r.site === sel.value);
+  document.getElementById('swiss-cards').innerHTML = filtered.map(r => {
+    const arrow = r.pct > 0 ? '↑' : '↓';
+    const col   = r.pct > 0 ? RED : GD;
+    const msg   = r.pct > 8 ? '⚠️ Unusual peak detected' : r.pct > 2 ? '🕐 Slight overrun — monitoring' : '✅ On track — target met';
+    const w     = Math.min(Math.abs(r.pct) * 5, 96);
+    const bc    = r.pct > 8 ? RED : r.pct > 2 ? WARN : G;
+    return `<div class="factory-card">
+      <div class="factory-card-header">
+        <div>
+          <div class="factory-name">🏭 ${r.site}</div>
+          <div class="factory-sub">Switzerland · ${r.canton} · ${r.product}</div>
+        </div>
+        <div>${statusBadge(r.status)}</div>
+      </div>
+      <div style="font-size:0.90rem;font-weight:700;margin-bottom:4px;">
+        ${r.mwh.toFixed(0)} MWh
+        &nbsp;<span style="color:${col};">${arrow} ${Math.abs(r.pct).toFixed(0)}%</span>
+        &nbsp;<span style="color:#666;">${r.co2e.toFixed(0)} tCO₂e</span>
+        &nbsp;<span style="color:${GD};">CHF ${(r.savingsChf/1000).toFixed(1)}k</span>
+      </div>
+      <div class="prog-bar"><div class="prog-bar-fill" style="width:${w}%;background:${bc};"></div></div>
+      <div style="font-size:0.76rem;color:#666;margin-top:4px;">${msg}</div>
+    </div>`;
+  }).join('');
+
+  // LV panel table
+  document.getElementById('lv-table').innerHTML = lvPanels.map(p => `<tr>
+    <td><strong>${p.panel}</strong></td>
+    <td>${p.powerFactor.toFixed(3)} ${pfBadge(p.pfStatus)}</td>
+    <td>${p.thd.toFixed(1)}% ${pfBadge(p.thdStatus)}</td>
+    <td>${p.loadFactor.toFixed(3)} ${pfBadge(p.lfStatus)}</td>
+    <td>${p.energyIntensity.toFixed(2)} kWh/m³</td>
+    <td>CHF ${p.operatingCost.toLocaleString()}</td>
+    <td style="color:${p.savings >= 0 ? GD : RED};font-weight:600;">
+      ${p.savings >= 0 ? '+' : ''}CHF ${p.savings.toLocaleString()}
+    </td>
+  </tr>`).join('');
+
+  // AHU cards
+  document.getElementById('ahu-cards').innerHTML = ahus.map(a => {
+    const hColor = a.health === 'PASS' ? G : a.health === 'WARN' ? WARN : RED;
+    return `<div class="ahu-card">
+      <div class="ahu-header">
+        <div class="ahu-id">🌬️ ${a.id}</div>
+        <div>${statusBadge(a.health)}</div>
+      </div>
+      <div class="ahu-metrics">
+        <div><span class="ahu-metric-label">Room Temp</span><br><span class="ahu-metric-value" style="color:${a.tempOk?GD:RED};">${a.roomTemp.toFixed(1)} °C</span></div>
+        <div><span class="ahu-metric-label">Humidity</span><br><span class="ahu-metric-value" style="color:${a.humidOk?GD:RED};">${a.roomHumid.toFixed(1)} %</span></div>
+        <div><span class="ahu-metric-label">Pressure</span><br><span class="ahu-metric-value" style="color:${a.pressOk?GD:RED};">${a.roomPress.toFixed(1)} Pa</span></div>
+        <div><span class="ahu-metric-label">Supply Temp</span><br><span class="ahu-metric-value">${a.supplyTemp.toFixed(1)} °C</span></div>
+        <div><span class="ahu-metric-label">Cooling</span><br><span class="ahu-metric-value">${a.coolingKw.toFixed(1)} kW</span></div>
+        <div><span class="ahu-metric-label">Heating</span><br><span class="ahu-metric-value">${a.heatingKw.toFixed(1)} kW</span></div>
+        <div><span class="ahu-metric-label">Efficiency</span><br><span class="ahu-metric-value" style="color:${a.effOk?GD:RED};">${a.efficiency.toFixed(1)} %</span></div>
+        <div><span class="ahu-metric-label">Daily Cost</span><br><span class="ahu-metric-value">CHF ${a.dailyCostChf}</span></div>
+        <div><span class="ahu-metric-label">COP</span><br><span class="ahu-metric-value">${a.cop.toFixed(2)}</span></div>
+        <div><span class="ahu-metric-label">CO₂/day</span><br><span class="ahu-metric-value">${a.co2Daily.toFixed(2)} t</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── ANOMALIES ────────────────────────────────────────────────────────────
+async function renderAnomalies() {
+  const { swissSites } = await loadData();
+  const anoms    = swissSites.filter(r => r.pct > 2).sort((a, b) => b.pct - a.pct);
+  const critical = anoms.filter(r => r.pct > 8);
+  const eLost    = anoms.reduce((s, r) => s + Math.max(0, r.mwh - r.baseline), 0);
+  const cfg      = getCfg();
+
+  document.getElementById('anom-kpis').innerHTML =
+    kpiCard('Total Anomalies', anoms.length.toString(),   'this month', 'neutral') +
+    kpiCard('Critical',        critical.length.toString(), 'action required', 'bad') +
+    kpiCard('Energy Lost', `${eLost.toFixed(0)} <span class="unit">MWh</span>`,
+      `≈ CHF ${(eLost * cfg.energyPrice * 1000 / 1000).toFixed(0)}k`, 'warn') +
+    kpiCard('Resolved', '3', 'this month', 'good');
+
+  const entries = [
+    { title: 'HVAC peak',         site: 'Avenches', sub: '+38% above baseline · 14 Jun, 03:20 AM · Electricity', sev: 'Critical', stat: 'Open', col: RED },
+    { title: 'Compressor overload',site: 'Broc',    sub: '+29% above baseline · 11 Jun, 11:45 PM · Gas',         sev: 'Critical', stat: 'Open', col: RED },
+    { title: 'Lighting off-hours', site: 'Orbe',    sub: '+11% above baseline · 09 Jun, 10:00 PM · Electricity', sev: 'Warning',  stat: 'Resolved', col: WARN },
+    { title: 'Steam indicator',    site: 'Henniez', sub: '+8% above baseline · 07 Jun, 06:15 AM · Steam',        sev: 'Warning',  stat: 'Resolved', col: WARN },
+    ...anoms.slice(0, 3).map(r => ({
+      title: `Consumption spike`, site: r.site,
+      sub: `+${r.pct.toFixed(1)}% above baseline · ${new Date().toLocaleDateString()} · Mixed`,
+      sev: r.pct > 8 ? 'Critical' : 'Warning',
+      stat: 'Open',
+      col: r.pct > 8 ? RED : WARN,
+    })),
+  ];
+
+  document.getElementById('anom-list').innerHTML = entries.map(e => {
+    const sevCls  = e.sev === 'Critical' ? 'badge-bad' : 'badge-warn';
+    const statCls = e.stat === 'Open'    ? 'badge-neutral' : 'badge-good';
+    return `<div class="anom-row">
+      <div style="width:10px;height:10px;border-radius:50%;background:${e.col};flex-shrink:0;"></div>
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:0.88rem;">${e.title} — ${e.site}</div>
+        <div style="font-size:0.74rem;color:#666;margin-top:2px;">${e.sub}</div>
+      </div>
+      <span class="badge ${sevCls}">${e.sev}</span>
+      <span class="badge ${statCls}">${e.stat}</span>
+      <span style="font-size:0.76rem;color:${BLUE};cursor:pointer;">View →</span>
+    </div>`;
+  }).join('');
+}
+
+// ── SAVINGS ──────────────────────────────────────────────────────────────
+async function renderSavings() {
+  const { swissSites, cfg } = await loadData();
+  const totalPot  = swissSites.reduce((s, r) => s + r.savingsChf, 0);
+  const realized  = totalPot * 0.37;
+  const mwhAv     = swissSites.reduce((s, r) => s + Math.max(0, r.mwh - r.baseline), 0);
+  const openOpp   = swissSites.filter(r => r.pct > 2).length;
+
+  document.getElementById('savings-kpis').innerHTML =
+    kpiCard('Total Potential',   `CHF ${(totalPot/1000).toFixed(0)}<span class="unit">k</span>`, 'across all sites') +
+    kpiCard('Already Realized',  `CHF ${(realized/1000).toFixed(0)}<span class="unit">k</span>`, '↑ 6% vs last month') +
+    kpiCard('MWh Avoidable',     `${mwhAv.toFixed(0)} <span class="unit">MWh</span>`, 'if all actions taken', 'warn') +
+    kpiCard('Open Opportunities', openOpp.toString(), 'awaiting action', 'warn');
+
+  const opps = [
+    { title: 'HVAC scheduling — Avenches',   desc: 'Reduce off-hours HVAC runtime by 40% · Electricity', prio: 'High',   p: 75, chf: 'CHF 14k', mwh: '52 MWh' },
+    { title: 'Compressor maintenance — Broc', desc: 'Fix compressor efficiency loss · Gas',               prio: 'Medium', p: 40, chf: 'CHF 10k', mwh: '38 MWh' },
+    { title: 'LED lighting upgrade — Bâle',  desc: 'Replace legacy lighting system · Electricity',        prio: 'Low',    p: 20, chf: 'CHF 6k',  mwh: '28 MWh' },
+    { title: 'Steam line insulation — Henniez', desc: 'Reduce steam heat loss · Steam',                  prio: 'Low',    p: 10, chf: 'CHF 8k',  mwh: '24 MWh' },
+  ];
+
+  document.getElementById('opp-list').innerHTML = opps.map(o => {
+    const pCls = o.prio === 'High' ? 'badge-bad' : o.prio === 'Medium' ? 'badge-warn' : 'badge-neutral';
+    return `<div class="opp-item">
+      <div class="opp-row">
+        <div>
+          <span style="font-weight:700;font-size:0.88rem;">${o.title}</span>
+          &nbsp;<span class="badge ${pCls}">${o.prio}</span><br>
+          <span style="font-size:0.74rem;color:#666;">${o.desc}</span>
+        </div>
+        <div style="text-align:right;min-width:90px;">
+          <div style="font-size:0.96rem;font-weight:800;color:${GD};">${o.chf}</div>
+          <div style="font-size:0.73rem;color:#666;">${o.mwh} saved</div>
+        </div>
+      </div>
+      <div class="prog-bar"><div class="prog-bar-fill" style="width:${o.p}%;background:${G};"></div></div>
+      <div style="font-size:0.68rem;color:#888;">${o.p}% action progress</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('savings-banner').innerHTML =
+    `↗ Implementing all open opportunities would avoid <strong>142 MWh</strong> and save <strong>CHF 24k</strong> over the next 3 months.`;
+}
+
+// ── CO2 ──────────────────────────────────────────────────────────────────
+async function renderCO2() {
+  const { swissSites, cfg } = await loadData();
+
+  const totalCo2 = swissSites.reduce((s, r) => s + r.co2e, 0);
+  const totalMwh = swissSites.reduce((s, r) => s + r.mwh, 0);
+
+  document.getElementById('co2-kpis').innerHTML =
+    kpiCard('Total CO₂e', `${totalCo2.toFixed(0)} <span class="unit">t</span>`, '↓ 4% vs last month') +
+    kpiCard('Per MWh', `${(totalCo2/totalMwh).toFixed(3)} <span class="unit">t/MWh</span>`, 'Swiss grid avg', 'neutral') +
+    kpiCard('vs 2030 Target', '−18%', 'target: −50% by 2030', 'warn') +
+    kpiCard('Annual Reduction', '6%', 'achieved in 2025 ✓');
+
+  const scopes = [
+    { label: 'Scope 1', color: RED,  bg: '#fdecea', desc: 'Direct emissions — gas combustion, company vehicles', val: `${(totalCo2*0.28).toFixed(0)} tCO₂e`, delta: '↓ 5% vs baseline', pct: 28, dColor: GD },
+    { label: 'Scope 2', color: WARN, bg: '#fef3e2', desc: 'Indirect emissions — purchased electricity & steam',  val: `${(totalCo2*0.48).toFixed(0)} tCO₂e`, delta: '↓ 3% vs baseline', pct: 48, dColor: GD },
+    { label: 'Scope 3', color: BLUE, bg: '#e8f0fb', desc: 'Value chain — suppliers, logistics, waste',           val: `${(totalCo2*0.24).toFixed(0)} tCO₂e`, delta: '↑ 2% vs baseline', pct: 24, dColor: RED },
+  ];
+
+  document.getElementById('scope-list').innerHTML = scopes.map(s => `
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid #f0f0f0;">
+      <div style="min-width:70px;">
+        <span style="background:${s.bg};color:${s.color};padding:4px 12px;border-radius:20px;font-size:0.70rem;font-weight:700;">${s.label}</span>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:0.82rem;color:#111;font-weight:500;margin-bottom:6px;">${s.desc}</div>
+        <div class="prog-bar"><div class="prog-bar-fill" style="width:${s.pct}%;background:${s.color};"></div></div>
+      </div>
+      <div style="text-align:right;min-width:120px;">
+        <div style="font-weight:700;font-size:0.86rem;">${s.val}</div>
+        <div style="font-size:0.72rem;color:${s.dColor};font-weight:600;">${s.delta}</div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('co2-table').innerHTML = swissSites.map(r => {
+    const arrow = r.pct > 0 ? '↑' : '↓';
+    const col   = r.pct > 0 ? RED : GD;
+    const intensity = (r.co2e / r.mwh).toFixed(3);
+    return `<tr>
+      <td><strong>${r.site}</strong></td>
+      <td>${r.co2e.toFixed(1)}</td>
+      <td>${intensity}</td>
+      <td style="color:${col};font-weight:600;">${arrow} ${Math.abs(r.pct).toFixed(1)}%</td>
+      <td>${statusBadge(r.status)}</td>
+      <td>${r.canton}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('co2-factor-display').textContent = cfg.emissionFactors.swissElectricity;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════════════════════════════════════════
+let currentPage = 'overview';
+
+function loadPage(page) {
+  currentPage = page;
+
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+
+  // Show/hide pages
+  document.querySelectorAll('.page').forEach(el => {
+    el.classList.toggle('active', el.id === `page-${page}`);
+  });
+
+  // Show filters only on factories page
+  document.getElementById('sidebar-filters').style.display = page === 'factories' ? 'block' : 'none';
+
+  // Render
+  switch (page) {
+    case 'overview':  renderOverview();  break;
+    case 'factories': renderFactories(); break;
+    case 'anomalies': renderAnomalies(); break;
+    case 'savings':   renderSavings();   break;
+    case 'co2':       renderCO2();       break;
+    case 'settings':  populateSettings(); break;
+  }
+}
+
+// Nav click
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => loadPage(el.dataset.page));
+});
+
+// Tabs (Swiss / Karawang)
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-swiss').style.display    = tab.dataset.tab === 'swiss'    ? 'block' : 'none';
+    document.getElementById('tab-karawang').style.display = tab.dataset.tab === 'karawang' ? 'block' : 'none';
+  });
+});
+
+// Site filter
+document.getElementById('filter-site').addEventListener('change', () => renderFactories());
+
+// ── Auto-refresh every 60 seconds ─────────────────────────────────────────
+setInterval(() => {
+  cachedData = null;
+  loadPage(currentPage);
+}, 60000);
+
+// ── Initial load ──────────────────────────────────────────────────────────
+loadPage('overview');
+</script>
+</body>
+</html>
