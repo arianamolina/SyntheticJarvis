@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nestlé - JARVIS Advanced</title>
+  <style>
+    :root {
+      --bg-main: #f5f7fa;
+      --sidebar-bg: #0b1426;
+      --sidebar-text: #8e9bb0;
+      --sidebar-header: #4c5d78;
+      --primary-blue: #1865f2;
+      --active-card-border: #2251cc;
+      --card-bg: #ffffff;
+      --card-border: #111827;
+      --text-dark: #111827;
+      --text-muted: #4b5563;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      display: flex;
+      height: 100vh;
+      background-color: var(--bg-main);
+      overflow: hidden;
+    }
+
+    /* --- SIDEBAR --- */
+    aside {
+      width: 270px;
+      background-color: var(--sidebar-bg);
+      color: var(--sidebar-text);
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+
+    .brand {
+      margin-bottom: 28px;
+      padding-left: 8px;
+    }
+
+    .brand h1 {
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .brand p {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: #7b8ea8;
+      margin-top: 2px;
+    }
+
+    .menu-group {
+      margin-bottom: 22px;
+    }
+
+    .menu-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--sidebar-header);
+      text-transform: uppercase;
+      padding-left: 8px;
+      margin-bottom: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--sidebar-text);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 3px;
+      user-select: none;
+    }
+
+    .nav-item:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+      color: #ffffff;
+    }
+
+    .nav-item.active {
+      background-color: var(--primary-blue);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .indicator-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+
+    /* Dot Colors */
+    .dot-blue { background-color: #3b82f6; }
+    .dot-purple { background-color: #8b5cf6; }
+    .dot-red { background-color: #ef4444; }
+    .dot-orange { background-color: #f97316; }
+    .dot-green { background-color: #10b981; }
+    .dot-cyan { background-color: #06b6d4; }
+
+    /* --- MAIN VIEWPORT --- */
+    main {
+      flex: 1;
+      padding: 36px 48px;
+      overflow-y: auto;
+    }
+
+    .section-title {
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin-bottom: 24px;
+    }
+
+    .view-panel {
+      display: none;
+    }
+
+    .view-panel.active {
+      display: block;
+    }
+
+    /* --- MACHINE GRID --- */
+    .machine-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .machine-card {
+      background-color: var(--card-bg);
+      border: 2px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      min-height: 250px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .machine-card:hover {
+      border-color: #3b82f6;
+    }
+
+    .machine-card.selected {
+      border: 2px solid var(--active-card-border);
+      background-color: #fcfdff;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .card-icon {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-dark);
+      line-height: 1.3;
+    }
+
+    .machine-card.selected .card-title {
+      color: var(--active-card-border);
+    }
+
+    .card-body {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--text-muted);
+    }
+
+    .machine-card.selected .card-body {
+      color: #1e3a8a;
+    }
+
+    /* --- STANDARD DOC CONTAINERS --- */
+    .doc-container {
+      background: var(--card-bg);
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 28px 32px;
+      color: var(--text-dark);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .doc-container h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-dark);
+    }
+
+    .doc-container p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .doc-container ul {
+      margin-left: 20px;
+    }
+
+    .doc-container li {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+
+    .doc-container li strong {
+      color: var(--text-dark);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside>
+    <div class="brand">
+      <h1>Nestlé</h1>
+      <p>JARVIS ADVANCED</p>
+    </div>
+
+    <!-- MONITOR -->
+    <div class="menu-group">
+      <div class="menu-group-title">Monitor</div>
+      <div class="nav-item" data-target="overview">
+        <span class="indicator-dot dot-blue"></span> Overview
+      </div>
+      <div class="nav-item" data-target="factories">
+        <span class="indicator-dot dot-purple"></span> Factories
+      </div>
+      <div class="nav-item" data-target="anomalies">
+        <span class="indicator-dot dot-red"></span> Anomalies
+      </div>
+    </div>
+
+    <!-- ANALYSIS -->
+    <div class="menu-group">
+      <div class="menu-group-title">Analysis</div>
+      <div class="nav-item" data-target="savings">
+        <span class="indicator-dot dot-orange"></span> Savings
+      </div>
+      <div class="nav-item" data-target="co2-tracking">
+        <span class="indicator-dot dot-green"></span> CO2 Tracking
+      </div>
+    </div>
+
+    <!-- SOURCES (Integrated Structure) -->
+    <div class="menu-group">
+      <div class="menu-group-title">Sources</div>
+      <div class="nav-item" data-target="sources-methodology">
+        <span class="indicator-dot dot-cyan"></span> Methodology & Formulas
+      </div>
+      <div class="nav-item active" data-target="sources-machines">
+        <span class="indicator-dot dot-blue"></span> Monitored Machines
+      </div>
+      <div class="nav-item" data-target="sources-data-arch">
+        <span class="indicator-dot dot-purple"></span> Data Architecture & APIs
+      </div>
+      <div class="nav-item" data-target="sources-standards">
+        <span class="indicator-dot dot-green"></span> Standards & References
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN VIEWPORT -->
+  <main>
+
+    <!-- 1. OVERVIEW -->
+    <section id="overview" class="view-panel">
+      <h1 class="section-title">Plant Overview</h1>
+      <div class="doc-container">
+        <h2>Real-Time Plant Performance</h2>
+        <p>Centralized monitoring cockpit aggregating power consumption, baseline thermal loads, compressed air availability, and steam production across all operational blocks.</p>
+      </div>
+    </section>
+
+    <!-- 2. FACTORIES -->
+    <section id="factories" class="view-panel">
+      <h1 class="section-title">Factories</h1>
+      <div class="doc-container">
+        <h2>Multi-Site Telemetry</h2>
+        <p>Comparative analytics and real-time operational status for connected manufacturing facilities and regional utility grids.</p>
+      </div>
+    </section>
+
+    <!-- 3. ANOMALIES -->
+    <section id="anomalies" class="view-panel">
+      <h1 class="section-title">Anomalies</h1>
+      <div class="doc-container">
+        <h2>Operational Alerts & Diagnostics</h2>
+        <p>Automated threshold monitoring flagging unexpected pressure drops, harmonic distortions, thermal runaway, and unexpected motor idling.</p>
+      </div>
+    </section>
+
+    <!-- 4. SAVINGS -->
+    <section id="savings" class="view-panel">
+      <h1 class="section-title">Savings</h1>
+      <div class="doc-container">
+        <h2>Energy & Financial Impact</h2>
+        <p>Tracking peak load shaving efficiency, thermodynamic recovery gains, and return-on-investment across upgraded assets.</p>
+      </div>
+    </section>
+
+    <!-- 5. CO2 TRACKING -->
+    <section id="co2-tracking" class="view-panel">
+      <h1 class="section-title">CO2 Tracking</h1>
+      <div class="doc-container">
+        <h2>Decarbonization Metrics</h2>
+        <p>Scope 1 and Scope 2 equivalent emissions monitored continuously against standardized regional grid carbon intensity factors.</p>
+      </div>
+    </section>
+
+    <!-- 6. SOURCES: MONITORED MACHINES -->
+    <section id="sources-machines" class="view-panel active">
+      <h1 class="section-title">Monitored Machines</h1>
+      <div class="machine-grid">
+        
+        <!-- Air Handling Unit -->
+        <div class="machine-card selected">
+          <div class="card-header">
+            <img src="https://img.icons8.com/fluency/96/air-conditioner.png" alt="Air Handling Unit" class="card-icon" />
+            <div class="card-title">Air Handling Unit Description</div>
+          </div>
+          <p class="card-body">
+            Centralized mechanical system designed to condition and circulate air throughout a facility as part of the overall HVAC system. It regulates indoor air quality, temperature, and humidity by taking in ambient and recirculated air, processing it through multiple internal stages, and distributing it via ductwork.
+          </p>
+        </div>
+
+        <!-- Chiller -->
+        <div class="machine-card">
+          <div class="card-header">
+            <img src="https://img.icons8.com/fluency/96/water-heater.png" alt="Chiller" class="card-icon" />
+            <div class="card-title">Chiller</div>
+          </div>
+          <p class="card-body">
+            Refrigeration system designed to remove heat from a liquid (typically water or a water-glycol mixture) via a vapor-compression or absorption refrigeration cycle.
+          </p>
+        </div>
+
+        <!-- Air Compressor -->
+        <div class="machine-card">
+          <div class="card-header">
+            <img src="https://img.icons8.com/fluency/96/compressor.png" alt="Air Compressor" class="card-icon" />
+            <div class="card-title">Air Compressor</div>
+          </div>
+          <p class="card-body">
+            An industrial air compressor converts electrical or mechanical power into potential energy stored in pressurized air. It draws in ambient air, mechanically reduces its volume to increase pressure, and discharges it into a centralized distribution network to power pneumatic machinery, automation systems, and plant instrumentation.
+          </p>
+        </div>
+
+        <!-- Industrial Boiler -->
+        <div class="machine-card">
+          <div class="card-header">
+            <img src="https://img.icons8.com/fluency/96/factory.png" alt="Industrial Boiler" class="card-icon" />
+            <div class="card-title">Industrial Boiler</div>
+          </div>
+          <p class="card-body">
+            An industrial boiler is a heavy-duty closed pressure vessel engineered to generate steam or high-temperature hot water by burning fuel (such as natural gas, biomass, or fuel oil) or utilizing electric heating elements.
+          </p>
+        </div>
+
+        <!-- LV Switchgear -->
+        <div class="machine-card">
+          <div class="card-header">
+            <img src="https://img.icons8.com/fluency/96/electrical.png" alt="LV Switchgear" class="card-icon" />
+            <div class="card-title">LV Switchgear/Power Distribution Panel</div>
+          </div>
+          <p class="card-body">
+            A Low Voltage (LV) Switchgear is a centralized electrical distribution assembly designed to control, protect, and isolate electrical equipment across industrial facilities (operating typically up to 1,000 V AC).
+          </p>
+        </div>
+
+        <!-- Fan -->
+        <div class="machine-card">
+          <div class="card-header">
+            <img src="https://img.icons8.com/fluency/96/fan.png" alt="Fan" class="card-icon" />
+            <div class="card-title">Fan</div>
+          </div>
+          <p class="card-body">
+            An industrial fan (or blower) is a dedicated mechanical device designed to generate continuous, high-volume airflow or static pressure to transport air, process gases, and airborne particulates through ductwork and industrial facilities.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 7. SOURCES: METHODOLOGY & FORMULAS -->
+    <section id="sources-methodology" class="view-panel">
+      <h1 class="section-title">Methodology & Formulas</h1>
+      <div class="doc-container">
+        <h2>Key Thermodynamic & Efficiency Formulations</h2>
+        <p>Core calculation models running on streaming sensor telemetry to compute plant efficiency metrics:</p>
+        <ul>
+          <li><strong>Thermal Efficiency:</strong> Evaluates actual useful thermal output versus chemical/electrical input power.</li>
+          <li><strong>Specific Energy Consumption (SEC):</strong> Evaluates energy input normalized per unit volume or mass flow.</li>
+          <li><strong>Coefficient of Performance (COP):</strong> Evaluates chiller cooling capacity relative to electrical compressor draw.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 8. SOURCES: DATA ARCHITECTURE & APIS -->
+    <section id="sources-data-arch" class="view-panel">
+      <h1 class="section-title">Data Architecture & APIs</h1>
+      <div class="doc-container">
+        <h2>Industrial Ingestion Pipelines</h2>
+        <p>Integration mapping between field instrumentation, industrial historians, and the analytical front-end:</p>
+        <ul>
+          <li><strong>AVEVA PI System:</strong> Streaming operational time-series data via Web API REST endpoints.</li>
+          <li><strong>TrendMiner:</strong> Industrial pattern recognition and event-frame detection integration.</li>
+          <li><strong>Edge Protocols:</strong> OPC UA & MQTT brokers standardizing field signals into unified telemetry streams.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 9. SOURCES: STANDARDS & REFERENCES -->
+    <section id="sources-standards" class="view-panel">
+      <h1 class="section-title">Standards & References</h1>
+      <div class="doc-container">
+        <h2>Regulatory Frameworks & Engineering Guidelines</h2>
+        <ul>
+          <li><strong>SFOE:</strong> Swiss Federal Office of Energy efficiency directives and auditing baselines.</li>
+          <li><strong>IEA:</strong> International Energy Agency thermal benchmark and industrial energy indices.</li>
+          <li><strong>IPCC:</strong> Standard emission factors for Scope 1 & Scope 2 CO₂ equivalent calculations.</li>
+          <li><strong>IEEE 519:</strong> Recommended practices for harmonic control in industrial power distribution panels.</li>
+        </ul>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- DYNAMIC VIEW SWITCHING SCRIPT -->
+  <script>
+    // Navigation routing
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const targetId = item.getAttribute('data-target');
+        const targetPanel = document.getElementById(targetId);
+
+        if (targetPanel) {
+          document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+          item.classList.add('active');
+
+          document.querySelectorAll('.view-panel').forEach(panel => panel.classList.remove('active'));
+          targetPanel.classList.add('active');
+        }
+      });
+    });
+
+    // Card selection visual state
+    document.querySelectorAll('.machine-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.machine-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+      });
+    });
+  </script>
+</body>
+</html>
